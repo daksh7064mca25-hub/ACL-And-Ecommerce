@@ -1,0 +1,54 @@
+
+User → Role
+
+Now: I implemented ACL / permission-based authorization.
+
+User → Role → Permissions
+
+Created a new Permission model to store individual permissions like:
+
+dashboard:read
+users:read
+users:create
+users:update
+users:delete
+promotions:read
+promotions:send
+
+
+Updated the Role model so each role can have multiple permissions.
+
+Updated the Seeder (initSetup) to:
+
+Create the permissions.
+
+Assign permissions to Admin, Staff, Rider and Customer roles.
+
+Keep the setup idempotent.
+
+Added a requirePermission() middleware.
+
+It checks whether the logged-in user's role has the required permission.
+If yes → request continues.
+If no → returns 403 Forbidden.
+
+
+Protected admin APIs using specific permissions:
+
+Users API → users:read
+Promotions API → promotions:send
+Dashboard → dashboard:read
+Added an API to get the logged-in admin's permissions:
+
+GET /api/admin/me/permissions
+
+Updated the frontend to use permissions:
+
+Sidebar only shows modules the user has permission to access.
+
+Users page checks users:read.
+
+Promotions page checks promotions:send.
+
+Important: Frontend permission checks are only for UI.
+The backend middleware is the actual security layer.

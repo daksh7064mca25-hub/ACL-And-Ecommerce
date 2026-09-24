@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { authenticateToken, requirePermission, requireAdmin } = require('../middleware/authMiddleware');
+const upload = require('../middleware/uploadMiddleware');
 const {
   getCustomers,
   sendPromotion,
@@ -11,6 +12,13 @@ const {
   updateRole,
   deleteRole,
 } = require('../controllers/adminController');
+const {
+  getAllProducts,
+  getProductById,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+} = require('../controllers/productController');
 
 // Test protected Admin route (ACL: dashboard:read)
 router.get('/test', authenticateToken, requirePermission('dashboard:read'), (req, res) => {
@@ -53,4 +61,26 @@ router.put('/roles/:id', authenticateToken, requirePermission('roles:update'), u
 // Delete Custom Role (ACL: roles:delete)
 router.delete('/roles/:id', authenticateToken, requirePermission('roles:delete'), deleteRole);
 
+// Products Module APIs
+// View All Products (ACL: products:read)
+router.get('/products', authenticateToken, requirePermission('products:read'), getAllProducts);
+
+// View Single Product (ACL: products:read)
+router.get('/products/:id', authenticateToken, requirePermission('products:read'), getProductById);
+
+// Create Product with Images (ACL: products:create)
+router.post('/products', authenticateToken, requirePermission('products:create'), upload.array('images', 10), createProduct);
+
+// Update Product & Images (ACL: products:update)
+router.put('/products/:id', authenticateToken, requirePermission('products:update'), upload.array('images', 10), updateProduct);
+
+const { getAllOrdersAdmin } = require('../controllers/orderController');
+
+// Delete Product (ACL: products:delete)
+router.delete('/products/:id', authenticateToken, requirePermission('products:delete'), deleteProduct);
+
+// Orders Module API for Admin (ACL: dashboard:read or admin)
+router.get('/orders', authenticateToken, requirePermission('dashboard:read'), getAllOrdersAdmin);
+
 module.exports = router;
+

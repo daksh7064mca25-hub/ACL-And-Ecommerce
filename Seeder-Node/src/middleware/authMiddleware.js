@@ -114,6 +114,35 @@ const requirePermission = (permissionName) => {
 };
 
 /**
+ * Optional Authentication Middleware
+ * If a valid Bearer token is provided, attaches req.user.
+ * If no token is provided, continues without error.
+ */
+const optionalAuth = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return next();
+    }
+    const token = authHeader.split(' ')[1];
+    if (!token) return next();
+
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) return next();
+
+    const decoded = jwt.verify(token, jwtSecret);
+    const user = await User.findById(decoded.id).select('-password');
+    if (user) {
+      req.user = user;
+    }
+    next();
+  } catch (err) {
+    // Silently continue for optional auth
+    next();
+  }
+};
+
+/**
  * Admin Authorization Middleware (Role-based legacy check)
  * Ensures the authenticated user possesses the 'Admin' role.
  * Must be used after authenticateToken.
@@ -131,7 +160,10 @@ const requireAdmin = (req, res, next) => {
 
 module.exports = {
   authenticateToken,
+  optionalAuth,
   requirePermission,
   requireAdmin,
   authMiddleware: authenticateToken,
 };
+
+

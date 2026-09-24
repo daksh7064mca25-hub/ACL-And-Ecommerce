@@ -251,8 +251,86 @@ const adminLogin = async (req, res) => {
   }
 };
 
+/**
+ * Customer Login Controller
+ * POST /api/auth/customer/login or POST /api/auth/login
+ */
+const customerLogin = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and password are required',
+      });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findOne({ email: normalizedEmail }).populate('role');
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password',
+      });
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password',
+      });
+    }
+
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      return res.status(500).json({
+        success: false,
+        message: 'Authentication configuration missing',
+      });
+    }
+
+    const token = jwt.sign(
+      {
+        id: user._id,
+        role: user.role ? user.role.name : 'Customer',
+      },
+      jwtSecret,
+      {
+        expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+      }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: 'Login successful',
+      token,
+      data: {
+        token,
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role ? user.role.name : 'Customer',
+          isEmailVerified: user.isEmailVerified,
+        },
+      },
+    });
+  } catch (error) {
+    console.error('[Customer Login Error]:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error during login. Please try again later.',
+    });
+  }
+};
+
 module.exports = {
   signup,
   verifyEmail,
   adminLogin,
+  customerLogin,
 };
+

@@ -63,6 +63,26 @@ const permissionsToCreate = [
     display: 'Delete Roles',
     description: 'Allows removing unused custom roles',
   },
+  {
+    name: 'products:read',
+    display: 'View Products',
+    description: 'Allows viewing all product records',
+  },
+  {
+    name: 'products:create',
+    display: 'Create Products',
+    description: 'Allows creating new products with multiple images',
+  },
+  {
+    name: 'products:update',
+    display: 'Update Products',
+    description: 'Allows editing product information and images',
+  },
+  {
+    name: 'products:delete',
+    display: 'Delete Products',
+    description: 'Allows removing products and associated images',
+  },
 ];
 
 const rolePermissionMapping = {
@@ -78,6 +98,10 @@ const rolePermissionMapping = {
     'roles:create',
     'roles:update',
     'roles:delete',
+    'products:read',
+    'products:create',
+    'products:update',
+    'products:delete',
   ],
   Staff: ['dashboard:read', 'users:read', 'users:update'],
   Rider: ['dashboard:read'],

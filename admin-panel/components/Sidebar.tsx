@@ -79,10 +79,10 @@ export default function Sidebar() {
       ),
     },
     {
-      name: 'Customers',
-      href: '#',
-      enabled: false,
-      badge: 'Coming soon',
+      name: 'Customers / Store',
+      href: process.env.NEXT_PUBLIC_CUSTOMER_URL || 'http://localhost:3001',
+      enabled: true,
+      badge: 'Live Site',
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -176,6 +176,33 @@ export default function Sidebar() {
             );
           }
 
+          // Handle external link (e.g. to customer storefront)
+          if (item.href.startsWith('http')) {
+            return (
+              <a
+                key={item.name}
+                href={item.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors group"
+                title="Open Customer Landing Page (http://localhost:3001)"
+              >
+                <div className="flex items-center gap-3">
+                  {item.icon}
+                  <span>{item.name}</span>
+                </div>
+                {item.badge && (
+                  <span className="text-[10px] font-semibold tracking-wider bg-emerald-950/80 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-700/50 flex items-center gap-1 group-hover:border-emerald-500 transition-colors">
+                    <span>{item.badge}</span>
+                    <svg className="w-3 h-3 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  </span>
+                )}
+              </a>
+            );
+          }
+
           return (
             <Link
               key={item.name}
@@ -195,11 +222,30 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Sidebar Footer info */}
-      <div className="p-4 border-t border-slate-800/80">
-        <div className="bg-slate-800/60 rounded-lg p-3 text-xs text-slate-400 border border-slate-700/50">
-          <div className="flex items-center gap-2 text-slate-300 font-medium mb-1">
+      {/* Sidebar Footer info with Quick Link to Storefront */}
+      <div className="p-4 border-t border-slate-800/80 space-y-2.5">
+        <a
+          href={process.env.NEXT_PUBLIC_CUSTOMER_URL || 'http://localhost:3001'}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-between bg-indigo-950/40 hover:bg-indigo-900/60 border border-indigo-800/50 hover:border-indigo-600 rounded-lg px-3 py-2 text-xs text-indigo-300 hover:text-white transition-all group shadow-sm"
+          title="Open Storefront in new tab (http://localhost:3001)"
+        >
+          <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span className="font-semibold text-slate-200">Customer Store</span>
+          </div>
+          <span className="flex items-center gap-1 text-[11px] text-indigo-400 group-hover:text-indigo-200">
+            <span>localhost:3001</span>
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </span>
+        </a>
+
+        <div className="bg-slate-800/60 rounded-lg p-2.5 text-xs text-slate-400 border border-slate-700/50">
+          <div className="flex items-center gap-2 text-slate-300 font-medium mb-0.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
             <span>ACL Enforced</span>
           </div>
           <p className="text-[11px] text-slate-400">Permission-Based Security</p>

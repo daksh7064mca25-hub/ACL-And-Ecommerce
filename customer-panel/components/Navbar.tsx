@@ -42,7 +42,7 @@ export default function Navbar() {
                 </svg>
               </div>
               <span className="text-xl font-bold bg-gradient-to-r from-white via-gray-100 to-gray-300 bg-clip-text text-transparent tracking-tight">
-                Nova<span className="text-indigo-400">Store</span>
+                Experto<span className="text-indigo-400">Store</span>
               </span>
             </Link>
           </div>

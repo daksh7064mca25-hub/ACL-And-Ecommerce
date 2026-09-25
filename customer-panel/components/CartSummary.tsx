@@ -8,12 +8,14 @@ interface CartSummaryProps {
   showCheckoutButton?: boolean;
   onCheckoutClick?: () => void;
   isLoading?: boolean;
+  buttonText?: string;
 }
 
 export default function CartSummary({
   showCheckoutButton = true,
   onCheckoutClick,
   isLoading = false,
+  buttonText = 'Proceed to Checkout',
 }: CartSummaryProps) {
   const { subtotal, shipping, tax, totalPrice, totalItems, items } = useCart();
 
@@ -84,7 +86,7 @@ export default function CartSummary({
                 </>
               ) : (
                 <>
-                  <span>Proceed to Checkout</span>
+                  <span>{buttonText}</span>
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
                   </svg>

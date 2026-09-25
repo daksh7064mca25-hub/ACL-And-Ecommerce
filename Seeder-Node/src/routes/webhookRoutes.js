@@ -6,4 +6,12 @@ const { handleStripeWebhook } = require('../controllers/webhookController');
 // POST /api/stripe/webhook
 router.post('/webhook', handleStripeWebhook);
 
+// Stripe Public Configuration (Returns safe publishable key)
+// GET /api/stripe/config
+router.get('/config', (req, res) => {
+  return res.status(200).json({
+    publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',
+  });
+});
+
 module.exports = router;

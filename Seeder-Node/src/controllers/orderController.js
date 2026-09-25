@@ -147,7 +147,7 @@ const createCheckoutSession = async (req, res) => {
     });
 
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
+      ui_mode: 'embedded',
       mode: 'payment',
       line_items,
       customer_email: order.customerEmail,
@@ -155,19 +155,19 @@ const createCheckoutSession = async (req, res) => {
       metadata: {
         orderId: order._id.toString(),
       },
-      success_url: `${customerFrontendUrl}/success?session_id={CHECKOUT_SESSION_ID}&order_id=${order._id}`,
-      cancel_url: `${customerFrontendUrl}/cancel?order_id=${order._id}`,
+      return_url: `${customerFrontendUrl}/success?session_id={CHECKOUT_SESSION_ID}&order_id=${order._id}`,
     });
 
     // Attach Stripe Checkout Session ID to Order
     order.stripeCheckoutSessionId = session.id;
     await order.save();
 
-    console.log(`[Checkout] Created Stripe session ${session.id} for Order ${order._id}`);
+    console.log(`[Checkout] Created Stripe Embedded Checkout session ${session.id} for Order ${order._id}`);
 
     return res.status(200).json({
       success: true,
-      message: 'Checkout session created successfully',
+      message: 'Embedded checkout session created successfully',
+      clientSecret: session.client_secret,
       url: session.url,
       sessionId: session.id,
       orderId: order._id,

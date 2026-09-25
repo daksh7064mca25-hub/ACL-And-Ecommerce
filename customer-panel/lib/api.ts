@@ -41,6 +41,7 @@ export interface CheckoutRequest {
 export interface CheckoutResponse {
   success: boolean;
   message?: string;
+  clientSecret?: string;
   url?: string;
   sessionId?: string;
   orderId?: string;
@@ -217,6 +218,29 @@ export async function getMyOrders(token: string): Promise<CustomerOrdersResponse
 }
 
 /**
+ * Retrieve Stripe Public Configuration
+ */
+export async function getStripeConfig(): Promise<{ publishableKey: string }> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/stripe/config`, {
+      method: 'GET',
+      cache: 'no-store',
+    });
+    if (response.ok) {
+      const data = await response.json();
+      if (data.publishableKey) {
+        return { publishableKey: data.publishableKey };
+      }
+    }
+  } catch (err) {
+    console.warn('[Stripe Config] Could not fetch public config from backend:', err);
+  }
+  return {
+    publishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '',
+  };
+}
+
+/**
  * Helper to get full image URL
  */
 export function getProductImageUrl(imagePath?: string): string {
@@ -227,4 +251,6 @@ export function getProductImageUrl(imagePath?: string): string {
   const cleanPath = imagePath.startsWith('/') ? imagePath : `/${imagePath}`;
   return `${API_BASE_URL}${cleanPath}`;
 }
+
+
 

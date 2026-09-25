@@ -148,35 +148,7 @@ export default function Sidebar() {
         {rawNavItems.map((item) => {
           const isActive = pathname === item.href;
 
-          // Check ACL permission if required
-          const isPermitted = !item.requiredPermission || (mounted ? hasPermission(item.requiredPermission) : true);
-          const isItemEnabled = item.enabled && isPermitted;
-
-          if (!isItemEnabled) {
-            return (
-              <div
-                key={item.name}
-                className="flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-slate-500 cursor-not-allowed opacity-50 select-none hover:bg-slate-800/30"
-                title={!isPermitted ? `Requires permission: ${item.requiredPermission}` : 'Coming soon'}
-              >
-                <div className="flex items-center gap-3">
-                  {item.icon}
-                  <span>{item.name}</span>
-                </div>
-                {item.badge ? (
-                  <span className="text-[10px] font-semibold uppercase tracking-wider bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full border border-slate-700">
-                    {item.badge}
-                  </span>
-                ) : !isPermitted ? (
-                  <span className="text-[10px] font-semibold uppercase tracking-wider bg-red-950/40 text-red-400 px-1.5 py-0.5 rounded border border-red-800/40">
-                    Locked
-                  </span>
-                ) : null}
-              </div>
-            );
-          }
-
-          // Handle external link (e.g. to customer storefront)
+          // 1. Handle external links (e.g. to customer storefront)
           if (item.href.startsWith('http')) {
             return (
               <a
@@ -200,6 +172,36 @@ export default function Sidebar() {
                   </span>
                 )}
               </a>
+            );
+          }
+
+          // 2. Check ACL permission for internal links (safe during SSR hydration)
+          const isPermitted = !item.requiredPermission || (mounted ? hasPermission(item.requiredPermission) : true);
+          const isItemEnabled = item.enabled && isPermitted;
+
+          if (!isItemEnabled) {
+            return (
+              <Link
+                key={item.name}
+                href="#"
+                onClick={(e) => e.preventDefault()}
+                className="flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-slate-500 cursor-not-allowed opacity-50 select-none hover:bg-slate-800/30"
+                title={!isPermitted ? `Requires permission: ${item.requiredPermission}` : 'Coming soon'}
+              >
+                <div className="flex items-center gap-3">
+                  {item.icon}
+                  <span>{item.name}</span>
+                </div>
+                {item.badge ? (
+                  <span className="text-[10px] font-semibold uppercase tracking-wider bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full border border-slate-700">
+                    {item.badge}
+                  </span>
+                ) : !isPermitted ? (
+                  <span className="text-[10px] font-semibold uppercase tracking-wider bg-red-950/40 text-red-400 px-1.5 py-0.5 rounded border border-red-800/40">
+                    Locked
+                  </span>
+                ) : null}
+              </Link>
             );
           }
 

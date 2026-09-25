@@ -151,6 +151,7 @@ const createCheckoutSession = async (req, res) => {
     const session = await stripe.checkout.sessions.create({
       ui_mode: 'embedded_page',
       mode: 'payment',
+      billing_address_collection: 'required',
       line_items,
       customer_email: order.customerEmail,
       client_reference_id: order._id.toString(),

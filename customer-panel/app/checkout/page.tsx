@@ -45,16 +45,20 @@ export default function CheckoutPage() {
     async function initStripe() {
       try {
         const config = await getStripeConfig();
-        const publishableKey =
+        const publishableKey = (
           config.publishableKey ||
           process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ||
-          '';
+          ''
+        ).trim();
 
-        if (publishableKey && !isCancelled) {
+        const hasValidFormat = publishableKey.startsWith('pk_test_') || publishableKey.startsWith('pk_live_');
+        console.log('[Stripe Debug] Publishable key configured:', Boolean(publishableKey), 'Valid format:', hasValidFormat);
+
+        if (publishableKey && hasValidFormat && !isCancelled) {
           setStripePromise(loadStripe(publishableKey));
         } else if (!isCancelled) {
           console.warn(
-            '[Stripe Warning]: No publishable key found. Please set NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY or configure backend.'
+            '[Stripe Configuration]: Valid Stripe Publishable Key (pk_test_...) is required to initialize client-side payment elements.'
           );
         }
       } catch (err) {
@@ -86,6 +90,7 @@ export default function CheckoutPage() {
         customerName: (customerName || user?.name || '').trim(),
       };
 
+      console.log('[Checkout Debug] Initiating embedded checkout session for order items:', checkoutPayload.items.length);
       const response = await createCheckoutSession(checkoutPayload, token);
 
       if (!response.success || !response.clientSecret) {
@@ -94,6 +99,7 @@ export default function CheckoutPage() {
         );
       }
 
+      console.log('[Checkout Debug] Received client_secret: true, session_id:', Boolean(response.sessionId));
       return response.clientSecret;
     } catch (err: any) {
       console.error('[Embedded Checkout Error]:', err);
@@ -111,6 +117,14 @@ export default function CheckoutPage() {
       setErrorMessage('Please provide a valid email address to receive your order receipt.');
       return;
     }
+
+    if (!stripePromise) {
+      setErrorMessage(
+        'Stripe Publishable Key (pk_test_...) is not configured. Please set NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY in customer-panel/.env.local with your real key from Stripe Dashboard.'
+      );
+      return;
+    }
+
     setErrorMessage(null);
     setIsInitializingPayment(true);
     setCheckoutSessionKey((prev) => prev + 1);

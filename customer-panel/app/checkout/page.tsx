@@ -121,17 +121,6 @@ export default function CheckoutPage() {
   const embeddedOptions = useMemo(
     () => ({
       fetchClientSecret,
-      appearance: {
-        theme: 'night' as const,
-        variables: {
-          colorPrimary: '#6366f1',
-          colorBackground: '#0b0f19',
-          colorText: '#f3f4f6',
-          colorDanger: '#ef4444',
-          fontFamily: 'system-ui, -apple-system, sans-serif',
-          borderRadius: '12px',
-        },
-      },
     }),
     [fetchClientSecret]
   );

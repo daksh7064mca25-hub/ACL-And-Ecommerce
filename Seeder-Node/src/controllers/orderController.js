@@ -101,6 +101,8 @@ const createCheckoutSession = async (req, res) => {
       email = 'customer@example.com';
     }
 
+    const currency = (process.env.STRIPE_CURRENCY || 'inr').toLowerCase();
+
     // 6. Create Pending Order in MongoDB
     order = await Order.create({
       customer: customerUserId,
@@ -108,7 +110,7 @@ const createCheckoutSession = async (req, res) => {
       customerName: name ? name.trim() : '',
       items: orderItems,
       totalAmount: Math.round(calculatedTotal * 100) / 100,
-      currency: 'usd',
+      currency,
       paymentStatus: 'pending',
       orderStatus: 'pending',
     });
@@ -132,7 +134,7 @@ const createCheckoutSession = async (req, res) => {
 
       return {
         price_data: {
-          currency: 'usd',
+          currency,
           product_data: {
             name: item.title,
             images: isPublicHttps ? [imageUrl] : [],
@@ -140,7 +142,7 @@ const createCheckoutSession = async (req, res) => {
               productId: item.product.toString(),
             },
           },
-          unit_amount: Math.round(item.priceAtPurchase * 100), // Stripe expects unit amount in cents
+          unit_amount: Math.round(item.priceAtPurchase * 100), // Stripe expects unit amount in cents/paise
         },
         quantity: item.quantity,
       };

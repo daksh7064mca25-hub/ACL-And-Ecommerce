@@ -95,6 +95,14 @@ const orderSchema = new mongoose.Schema(
       postal_code: { type: String, default: '' },
       country: { type: String, default: '' },
     },
+    paymentSuccessEmailSent: {
+      type: Boolean,
+      default: false,
+    },
+    paymentFailedEmailSent: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

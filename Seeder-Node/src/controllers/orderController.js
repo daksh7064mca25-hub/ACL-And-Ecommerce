@@ -158,6 +158,11 @@ const createCheckoutSession = async (req, res) => {
       metadata: {
         orderId: order._id.toString(),
       },
+      payment_intent_data: {
+        metadata: {
+          orderId: order._id.toString(),
+        },
+      },
       return_url: `${customerFrontendUrl}/success?session_id={CHECKOUT_SESSION_ID}&order_id=${order._id}`,
     });
 

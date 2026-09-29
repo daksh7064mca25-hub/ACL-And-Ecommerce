@@ -1,6 +1,8 @@
+const mongoose = require('mongoose');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
 const { getStripe } = require('../config/stripe');
+const { sendPaymentSuccessEmail, sendPaymentFailedEmail } = require('../services/emailService');
 
 /**
  * Stripe Webhook Handler
@@ -44,7 +46,7 @@ const handleStripeWebhook = async (req, res) => {
         console.log(`[Stripe Webhook] Processing checkout.session.completed for Order ID: ${orderId}, Session ID: ${session.id}`);
 
         let order = null;
-        if (orderId) {
+        if (orderId && mongoose.Types.ObjectId.isValid(orderId)) {
           order = await Order.findById(orderId);
         }
         if (!order) {
@@ -59,6 +61,23 @@ const handleStripeWebhook = async (req, res) => {
         // Idempotency check: avoid double deduction if webhook is received multiple times
         if (order.paymentStatus === 'paid') {
           console.log(`[Stripe Webhook] Order ${order._id} is already marked as paid. Skipping inventory decrement.`);
+
+          // If payment was marked paid previously but email failed or was pending, retry email safely
+          if (!order.paymentSuccessEmailSent) {
+            try {
+              const emailResult = await sendPaymentSuccessEmail(order);
+              if (emailResult.success) {
+                order.paymentSuccessEmailSent = true;
+                await order.save();
+                console.log(`[Stripe Webhook] Payment Success email dispatched to ${order.customerEmail}`);
+              } else {
+                console.warn(`[Stripe Webhook Warning] Payment Success email could not be sent: ${emailResult.error}`);
+              }
+            } catch (mailErr) {
+              console.error(`[Stripe Webhook Error] Failed to send payment success email:`, mailErr.message);
+            }
+          }
+
           return res.status(200).json({ received: true, message: 'Order already processed' });
         }
 
@@ -108,6 +127,23 @@ const handleStripeWebhook = async (req, res) => {
 
         await order.save();
         console.log(`[Stripe Webhook] Order ${order._id} marked as PAID & CONFIRMED.`);
+
+        // Send Payment Success Email (Idempotent & Safe against SMTP failure)
+        if (!order.paymentSuccessEmailSent) {
+          try {
+            const emailResult = await sendPaymentSuccessEmail(order);
+            if (emailResult.success) {
+              order.paymentSuccessEmailSent = true;
+              await order.save();
+              console.log(`[Stripe Webhook] Payment Success email dispatched to ${order.customerEmail}`);
+            } else {
+              console.warn(`[Stripe Webhook Warning] Payment Success email could not be sent: ${emailResult.error}`);
+            }
+          } catch (mailErr) {
+            console.error(`[Stripe Webhook Error] Failed to dispatch payment success email:`, mailErr.message);
+          }
+        }
+
         break;
       }
 
@@ -115,18 +151,98 @@ const handleStripeWebhook = async (req, res) => {
         const paymentIntent = event.data.object;
         console.warn(`[Stripe Webhook] Payment failed for PaymentIntent: ${paymentIntent.id}`);
 
-        const order = await Order.findOne({
-          $or: [
-            { stripePaymentIntentId: paymentIntent.id },
-            { stripeCheckoutSessionId: paymentIntent.metadata?.sessionId },
-          ],
-        });
+        const orderId = paymentIntent.metadata?.orderId;
+        let order = null;
+        if (orderId && mongoose.Types.ObjectId.isValid(orderId)) {
+          order = await Order.findById(orderId);
+        }
+        if (!order) {
+          order = await Order.findOne({
+            $or: [
+              { stripePaymentIntentId: paymentIntent.id },
+              { stripeCheckoutSessionId: paymentIntent.metadata?.sessionId },
+              { stripeCheckoutSessionId: paymentIntent.metadata?.checkout_session_id },
+            ],
+          });
+        }
+
+        if (order) {
+          if (order.paymentStatus === 'paid') {
+            console.warn(`[Stripe Webhook] Received payment_intent.payment_failed for already paid Order ${order._id}. Skipping status update.`);
+            break;
+          }
+
+          order.paymentStatus = 'failed';
+          if (!order.stripePaymentIntentId && paymentIntent.id) {
+            order.stripePaymentIntentId = paymentIntent.id;
+          }
+          await order.save();
+          console.log(`[Stripe Webhook] Order ${order._id} marked as FAILED.`);
+
+          // Extract safe failure reason
+          const failureReason =
+            paymentIntent.last_payment_error?.message ||
+            paymentIntent.cancellation_reason ||
+            'Your card was declined or the payment session expired.';
+
+          // Send Payment Failed Email (Idempotent & Safe)
+          if (!order.paymentFailedEmailSent) {
+            try {
+              const emailResult = await sendPaymentFailedEmail(order, failureReason);
+              if (emailResult.success) {
+                order.paymentFailedEmailSent = true;
+                await order.save();
+                console.log(`[Stripe Webhook] Payment Failed email dispatched to ${order.customerEmail}`);
+              } else {
+                console.warn(`[Stripe Webhook Warning] Payment Failed email could not be sent: ${emailResult.error}`);
+              }
+            } catch (mailErr) {
+              console.error(`[Stripe Webhook Error] Failed to dispatch payment failed email:`, mailErr.message);
+            }
+          } else {
+            console.log(`[Stripe Webhook] Payment failed email already sent for Order ${order._id}. Skipping duplicate.`);
+          }
+        } else {
+          console.warn(`[Stripe Webhook] No matching order found for failed PaymentIntent ${paymentIntent.id}`);
+        }
+        break;
+      }
+
+      case 'checkout.session.async_payment_failed': {
+        const session = event.data.object;
+        console.warn(`[Stripe Webhook] Async payment failed for Session: ${session.id}`);
+
+        const orderId = session.metadata?.orderId || session.client_reference_id;
+        let order = null;
+        if (orderId && mongoose.Types.ObjectId.isValid(orderId)) {
+          order = await Order.findById(orderId);
+        }
+        if (!order) {
+          order = await Order.findOne({ stripeCheckoutSessionId: session.id });
+        }
 
         if (order && order.paymentStatus !== 'paid') {
           order.paymentStatus = 'failed';
-          order.orderStatus = 'cancelled';
           await order.save();
-          console.log(`[Stripe Webhook] Order ${order._id} marked as FAILED.`);
+          console.log(`[Stripe Webhook] Order ${order._id} marked as FAILED via async_payment_failed.`);
+
+          if (!order.paymentFailedEmailSent) {
+            try {
+              const emailResult = await sendPaymentFailedEmail(
+                order,
+                'The asynchronous payment method failed or expired.'
+              );
+              if (emailResult.success) {
+                order.paymentFailedEmailSent = true;
+                await order.save();
+                console.log(`[Stripe Webhook] Payment Failed email dispatched to ${order.customerEmail}`);
+              } else {
+                console.warn(`[Stripe Webhook Warning] Payment Failed email could not be sent: ${emailResult.error}`);
+              }
+            } catch (mailErr) {
+              console.error(`[Stripe Webhook Error] Failed to dispatch payment failed email:`, mailErr.message);
+            }
+          }
         }
         break;
       }

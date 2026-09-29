@@ -83,6 +83,21 @@ const permissionsToCreate = [
     display: 'Delete Products',
     description: 'Allows removing products and associated images',
   },
+  {
+    name: 'refunds:read',
+    display: 'View Refund Requests',
+    description: 'Allows viewing refund requests and customer order details',
+  },
+  {
+    name: 'refunds:approve',
+    display: 'Approve & Process Refunds',
+    description: 'Allows approving customer refund requests and processing refunds via Stripe',
+  },
+  {
+    name: 'refunds:reject',
+    display: 'Reject Refund Requests',
+    description: 'Allows rejecting customer refund requests with an explanation note',
+  },
 ];
 
 const rolePermissionMapping = {
@@ -102,6 +117,9 @@ const rolePermissionMapping = {
     'products:create',
     'products:update',
     'products:delete',
+    'refunds:read',
+    'refunds:approve',
+    'refunds:reject',
   ],
   Staff: ['dashboard:read', 'users:read', 'users:update'],
   Rider: ['dashboard:read'],

@@ -103,6 +103,26 @@ const orderSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    refundStatus: {
+      type: String,
+      enum: ['none', 'requested', 'processing', 'partial', 'refunded', 'rejected', 'failed'],
+      default: 'none',
+      index: true,
+    },
+    refundedAmount: {
+      type: Number,
+      default: 0,
+      min: [0, 'Refunded amount must not be negative'],
+    },
+    stripeRefundId: {
+      type: String,
+      default: null,
+    },
+    refundRequestId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'RefundRequest',
+      default: null,
+    },
   },
   {
     timestamps: true,

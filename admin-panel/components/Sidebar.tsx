@@ -79,6 +79,17 @@ export default function Sidebar() {
       ),
     },
     {
+      name: 'Refund Requests',
+      href: '/refunds',
+      requiredPermission: 'refunds:read',
+      enabled: true,
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+        </svg>
+      ),
+    },
+    {
       name: 'Customers / Store',
       href: process.env.NEXT_PUBLIC_CUSTOMER_URL || 'http://localhost:3001',
       enabled: true,

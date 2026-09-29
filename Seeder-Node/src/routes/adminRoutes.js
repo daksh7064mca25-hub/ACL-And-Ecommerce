@@ -19,6 +19,7 @@ const {
   updateProduct,
   deleteProduct,
 } = require('../controllers/productController');
+const { getAllOrdersAdmin } = require('../controllers/orderController');
 
 // Test protected Admin route (ACL: dashboard:read)
 router.get('/test', authenticateToken, requirePermission('dashboard:read'), (req, res) => {
@@ -74,13 +75,32 @@ router.post('/products', authenticateToken, requirePermission('products:create')
 // Update Product & Images (ACL: products:update)
 router.put('/products/:id', authenticateToken, requirePermission('products:update'), upload.array('images', 10), updateProduct);
 
-const { getAllOrdersAdmin } = require('../controllers/orderController');
-
 // Delete Product (ACL: products:delete)
 router.delete('/products/:id', authenticateToken, requirePermission('products:delete'), deleteProduct);
 
 // Orders Module API for Admin (ACL: dashboard:read or admin)
 router.get('/orders', authenticateToken, requirePermission('dashboard:read'), getAllOrdersAdmin);
 
+const {
+  getAllRefundRequestsAdmin,
+  getRefundRequestByIdAdmin,
+  approveRefundRequestAdmin,
+  rejectRefundRequestAdmin,
+} = require('../controllers/refundController');
+
+// Refund Requests Module APIs
+// View all refund requests (ACL: refunds:read)
+router.get('/refund-requests', authenticateToken, requirePermission('refunds:read'), getAllRefundRequestsAdmin);
+
+// View single refund request details (ACL: refunds:read)
+router.get('/refund-requests/:id', authenticateToken, requirePermission('refunds:read'), getRefundRequestByIdAdmin);
+
+// Approve & process refund via Stripe (ACL: refunds:approve)
+router.post('/refund-requests/:id/approve', authenticateToken, requirePermission('refunds:approve'), approveRefundRequestAdmin);
+
+// Reject refund request with note (ACL: refunds:reject)
+router.post('/refund-requests/:id/reject', authenticateToken, requirePermission('refunds:reject'), rejectRefundRequestAdmin);
+
 module.exports = router;
+
 

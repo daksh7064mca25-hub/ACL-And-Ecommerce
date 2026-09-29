@@ -859,4 +859,304 @@ export async function deleteProduct(id: string, authToken?: string): Promise<Del
   }
 }
 
+export interface AdminRefundRequest {
+  _id: string;
+  order: {
+    _id: string;
+    customer?: {
+      _id: string;
+      name: string;
+      email: string;
+    } | string;
+    customerName?: string;
+    customerEmail?: string;
+    totalAmount: number;
+    currency: string;
+    paymentStatus: string;
+    orderStatus: string;
+    refundStatus: string;
+    refundedAmount?: number;
+    stripePaymentIntentId?: string;
+    stripeCheckoutSessionId?: string;
+    items: Array<{
+      product?: any;
+      title: string;
+      priceAtPurchase: number;
+      quantity: number;
+      image?: string;
+    }>;
+    createdAt: string;
+  } | null;
+  customer: {
+    _id: string;
+    name: string;
+    email: string;
+  } | null;
+  reason: string;
+  description?: string;
+  status: 'pending' | 'approved' | 'rejected' | 'processing' | 'refunded' | 'failed' | 'cancelled';
+  requestedAmount: number;
+  approvedAmount?: number;
+  currency: string;
+  stripeRefundId?: string;
+  stripePaymentIntentId?: string;
+  stripeChargeId?: string;
+  adminNote?: string;
+  failureReason?: string;
+  requestedAt: string;
+  processedAt?: string;
+  processedBy?: {
+    _id: string;
+    name: string;
+    email: string;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GetRefundRequestsResponse {
+  success: boolean;
+  count?: number;
+  refundRequests?: AdminRefundRequest[];
+  message?: string;
+  status?: number;
+}
+
+export interface GetSingleRefundRequestResponse {
+  success: boolean;
+  refundRequest?: AdminRefundRequest;
+  message?: string;
+  status?: number;
+}
+
+export interface ApproveRefundResponse {
+  success: boolean;
+  message: string;
+  refundRequest?: AdminRefundRequest;
+  stripeRefund?: any;
+  status?: number;
+}
+
+export interface RejectRefundResponse {
+  success: boolean;
+  message: string;
+  refundRequest?: AdminRefundRequest;
+  status?: number;
+}
+
+/**
+ * Fetch all refund requests (Requires ACL: refunds:read)
+ * GET /api/admin/refund-requests
+ */
+export async function getRefundRequests(
+  params?: { status?: string; search?: string },
+  authToken?: string
+): Promise<GetRefundRequestsResponse> {
+  const token = authToken || getToken();
+  if (!token) {
+    return {
+      success: false,
+      status: 401,
+      message: 'Authentication token missing. Please log in.',
+    };
+  }
+
+  try {
+    const url = new URL(`${API_BASE_URL}/api/admin/refund-requests`);
+    if (params?.status && params.status !== 'all') {
+      url.searchParams.append('status', params.status);
+    }
+    if (params?.search && params.search.trim()) {
+      url.searchParams.append('search', params.search.trim());
+    }
+
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      return {
+        success: false,
+        status: response.status,
+        message: result?.message || `Failed to fetch refund requests (Status: ${response.status})`,
+      };
+    }
+
+    return {
+      success: true,
+      status: 200,
+      count: result?.count,
+      refundRequests: result?.refundRequests || [],
+    };
+  } catch (error) {
+    return {
+      success: false,
+      status: 0,
+      message: 'Network error: Unable to connect to backend to fetch refund requests.',
+    };
+  }
+}
+
+/**
+ * Fetch a single refund request by ID (Requires ACL: refunds:read)
+ * GET /api/admin/refund-requests/:id
+ */
+export async function getRefundRequestById(
+  id: string,
+  authToken?: string
+): Promise<GetSingleRefundRequestResponse> {
+  const token = authToken || getToken();
+  if (!token) {
+    return {
+      success: false,
+      status: 401,
+      message: 'Authentication token missing. Please log in.',
+    };
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/admin/refund-requests/${id}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      return {
+        success: false,
+        status: response.status,
+        message: result?.message || `Failed to fetch refund request details (Status: ${response.status})`,
+      };
+    }
+
+    return {
+      success: true,
+      status: 200,
+      refundRequest: result?.refundRequest,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      status: 0,
+      message: 'Network error: Unable to connect to backend to fetch refund details.',
+    };
+  }
+}
+
+/**
+ * Approve refund request and process via Stripe API (Requires ACL: refunds:approve)
+ * POST /api/admin/refund-requests/:id/approve
+ */
+export async function approveRefundRequest(
+  id: string,
+  payload?: { adminNote?: string },
+  authToken?: string
+): Promise<ApproveRefundResponse> {
+  const token = authToken || getToken();
+  if (!token) {
+    return {
+      success: false,
+      status: 401,
+      message: 'Authentication token missing. Please log in.',
+    };
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/admin/refund-requests/${id}/approve`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload || {}),
+    });
+
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      return {
+        success: false,
+        status: response.status,
+        message: result?.message || `Failed to approve refund (Status: ${response.status})`,
+      };
+    }
+
+    return {
+      success: true,
+      status: response.status,
+      message: result?.message || 'Refund processed successfully via Stripe.',
+      refundRequest: result?.refundRequest,
+      stripeRefund: result?.stripeRefund,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      status: 0,
+      message: 'Network error: Unable to connect to backend server to process refund.',
+    };
+  }
+}
+
+/**
+ * Reject refund request with reason/note (Requires ACL: refunds:reject)
+ * POST /api/admin/refund-requests/:id/reject
+ */
+export async function rejectRefundRequest(
+  id: string,
+  payload: { adminNote: string },
+  authToken?: string
+): Promise<RejectRefundResponse> {
+  const token = authToken || getToken();
+  if (!token) {
+    return {
+      success: false,
+      status: 401,
+      message: 'Authentication token missing. Please log in.',
+    };
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/admin/refund-requests/${id}/reject`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      return {
+        success: false,
+        status: response.status,
+        message: result?.message || `Failed to reject refund (Status: ${response.status})`,
+      };
+    }
+
+    return {
+      success: true,
+      status: response.status,
+      message: result?.message || 'Refund request rejected.',
+      refundRequest: result?.refundRequest,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      status: 0,
+      message: 'Network error: Unable to connect to backend server to reject refund.',
+    };
+  }
+}
+
+
 

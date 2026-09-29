@@ -1,8 +1,14 @@
 const mongoose = require('mongoose');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
+const RefundRequest = require('../models/RefundRequest');
 const { getStripe } = require('../config/stripe');
-const { sendPaymentSuccessEmail, sendPaymentFailedEmail } = require('../services/emailService');
+const {
+  sendPaymentSuccessEmail,
+  sendPaymentFailedEmail,
+  sendRefundSuccessEmail,
+  sendRefundFailedEmail,
+} = require('../services/emailService');
 
 /**
  * Stripe Webhook Handler
@@ -245,6 +251,119 @@ const handleStripeWebhook = async (req, res) => {
               console.error(`[Stripe Webhook Error] Failed to dispatch payment failed email:`, mailErr.message);
             }
           }
+        }
+        break;
+      }
+
+      case 'refund.created':
+      case 'refund.updated': {
+        const refund = event.data.object;
+        console.log(`[Stripe Webhook] Handling ${event.type} for Refund ID: ${refund.id}, status: ${refund.status}`);
+
+        const orderId = refund.metadata?.orderId;
+        const refundRequestId = refund.metadata?.refundRequestId;
+
+        let refundRequest = null;
+        if (refundRequestId && mongoose.Types.ObjectId.isValid(refundRequestId)) {
+          refundRequest = await RefundRequest.findById(refundRequestId);
+        }
+        if (!refundRequest) {
+          refundRequest = await RefundRequest.findOne({
+            $or: [
+              { stripeRefundId: refund.id },
+              ...(refund.payment_intent ? [{ stripePaymentIntentId: refund.payment_intent }] : []),
+            ],
+          });
+        }
+
+        let order = null;
+        if (orderId && mongoose.Types.ObjectId.isValid(orderId)) {
+          order = await Order.findById(orderId);
+        } else if (refundRequest?.order) {
+          order = await Order.findById(refundRequest.order);
+        } else if (refund.payment_intent) {
+          order = await Order.findOne({ stripePaymentIntentId: refund.payment_intent });
+        }
+
+        if (refund.status === 'succeeded') {
+          const refundedAmount = refund.amount ? refund.amount / 100 : (refundRequest?.requestedAmount || 0);
+
+          if (refundRequest && refundRequest.status !== 'refunded') {
+            refundRequest.status = 'refunded';
+            refundRequest.stripeRefundId = refund.id;
+            refundRequest.stripePaymentIntentId = refund.payment_intent || refundRequest.stripePaymentIntentId;
+            refundRequest.stripeChargeId = refund.charge || refundRequest.stripeChargeId;
+            refundRequest.approvedAmount = refundedAmount;
+            refundRequest.processedAt = new Date();
+            await refundRequest.save();
+            console.log(`[Stripe Webhook] RefundRequest ${refundRequest._id} marked as REFUNDED.`);
+          }
+
+          if (order && order.refundStatus !== 'refunded') {
+            order.refundStatus = 'refunded';
+            order.refundedAmount = refundedAmount;
+            order.stripeRefundId = refund.id;
+            if (refundRequest) order.refundRequestId = refundRequest._id;
+            await order.save();
+            console.log(`[Stripe Webhook] Order ${order._id} marked as REFUNDED.`);
+          }
+        } else if (refund.status === 'failed' || refund.status === 'canceled') {
+          if (refundRequest && refundRequest.status !== 'failed') {
+            refundRequest.status = 'failed';
+            refundRequest.failureReason = refund.failure_reason || 'Refund failed via Stripe.';
+            await refundRequest.save();
+            console.log(`[Stripe Webhook] RefundRequest ${refundRequest._id} marked as FAILED.`);
+          }
+          if (order && order.refundStatus !== 'failed') {
+            order.refundStatus = 'failed';
+            await order.save();
+          }
+        }
+        break;
+      }
+
+      case 'refund.failed': {
+        const refund = event.data.object;
+        console.warn(`[Stripe Webhook] Refund failed for Refund ID: ${refund.id}`);
+
+        const refundRequestId = refund.metadata?.refundRequestId;
+        let refundRequest = null;
+        if (refundRequestId && mongoose.Types.ObjectId.isValid(refundRequestId)) {
+          refundRequest = await RefundRequest.findById(refundRequestId);
+        } else {
+          refundRequest = await RefundRequest.findOne({ stripeRefundId: refund.id });
+        }
+
+        if (refundRequest) {
+          refundRequest.status = 'failed';
+          refundRequest.failureReason = refund.failure_reason || 'Refund processing failed in Stripe.';
+          await refundRequest.save();
+        }
+
+        const orderId = refund.metadata?.orderId || refundRequest?.order;
+        if (orderId) {
+          await Order.findByIdAndUpdate(orderId, { refundStatus: 'failed' });
+        }
+        break;
+      }
+
+      case 'charge.refunded': {
+        const charge = event.data.object;
+        console.log(`[Stripe Webhook] Handling charge.refunded for Charge ID: ${charge.id}, PaymentIntent: ${charge.payment_intent}`);
+
+        const order = await Order.findOne({
+          $or: [
+            { stripePaymentIntentId: charge.payment_intent },
+            { stripeCheckoutSessionId: charge.metadata?.sessionId },
+          ],
+        });
+
+        if (order) {
+          const refundedAmount = charge.amount_refunded ? charge.amount_refunded / 100 : order.totalAmount;
+          order.refundStatus = charge.refunded ? 'refunded' : 'partial';
+          order.refundedAmount = refundedAmount;
+          await order.save();
+          console.log(`[Stripe Webhook] Order ${order._id} refund status updated to ${order.refundStatus}`);
         }
         break;
       }

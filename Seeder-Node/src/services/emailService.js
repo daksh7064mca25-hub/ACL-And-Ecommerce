@@ -532,9 +532,424 @@ const sendPaymentFailedEmail = async (order, failureReason) => {
   }
 };
 
+/**
+ * Sends a notification email when a customer raises a Refund Request.
+ */
+const sendRefundRequestReceivedEmail = async ({ order, refundRequest }) => {
+  const email = order?.customerEmail || refundRequest?.customerEmail;
+  if (!email) {
+    return { success: false, error: 'Customer email is missing' };
+  }
+
+  const customerName = refundRequest?.customerName || order?.customerName || 'Customer';
+  const orderId = order?._id ? order._id.toString() : refundRequest?.order ? refundRequest.order.toString() : 'N/A';
+  const amountFormatted = formatCurrency(refundRequest?.requestedAmount || order?.totalAmount, order?.currency || refundRequest?.currency);
+  const fromEmail = process.env.EMAIL_FROM || '"ExpertoStore" <no-reply@example.com>';
+  const subject = `Refund Request Received - Order #${orderId}`;
+
+  const plainText = `Refund Request Received\n\nHello ${customerName},\n\nYour refund request for order #${orderId} has been received and is currently under review by our administration team.\n\nRefund Request Details:\n- Order ID: #${orderId}\n- Refund Amount: ${amountFormatted}\n- Reason: ${refundRequest?.reason || 'Not specified'}\n- Description: ${refundRequest?.description || 'None provided'}\n- Status: PENDING\n\nWe will notify you once our team has reviewed your request.\n\nRegards,\nExpertoStore`;
+
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"><title>${escapeHtml(subject)}</title></head>
+    <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #334155;">
+      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="padding: 30px 10px;">
+        <tr>
+          <td align="center">
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); border: 1px solid #e2e8f0;">
+              <tr>
+                <td style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 32px 30px; text-align: center;">
+                  <div style="font-size: 22px; font-weight: 800; color: #ffffff; margin-bottom: 8px;">
+                    EXPERTO<span style="color: #38bdf8;">STORE</span>
+                  </div>
+                  <div style="display: inline-block; background-color: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.4); border-radius: 9999px; padding: 6px 16px; margin-top: 10px;">
+                    <span style="color: #818cf8; font-size: 13px; font-weight: 600; text-transform: uppercase;">Refund Request Under Review</span>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 32px 30px;">
+                  <p style="font-size: 16px; color: #0f172a; margin-top: 0; font-weight: 600;">
+                    Hello ${escapeHtml(customerName)},
+                  </p>
+                  <p style="font-size: 15px; color: #475569; line-height: 1.6; margin-bottom: 24px;">
+                    Your refund request for order <strong>#${escapeHtml(orderId)}</strong> has been received and is currently under review by our administration team.
+                  </p>
+
+                  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 24px; padding: 16px;">
+                    <tr>
+                      <td style="padding: 6px 12px; font-size: 13px; color: #64748b;">Order ID:</td>
+                      <td style="padding: 6px 12px; font-size: 13px; color: #0f172a; font-weight: 600; text-align: right;">#${escapeHtml(orderId)}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 12px; font-size: 13px; color: #64748b;">Requested Amount:</td>
+                      <td style="padding: 6px 12px; font-size: 13px; color: #0f172a; font-weight: 700; text-align: right;">${escapeHtml(amountFormatted)}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 12px; font-size: 13px; color: #64748b;">Reason:</td>
+                      <td style="padding: 6px 12px; font-size: 13px; color: #0f172a; font-weight: 500; text-align: right;">${escapeHtml(refundRequest?.reason || 'Not specified')}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 12px; font-size: 13px; color: #64748b;">Status:</td>
+                      <td style="padding: 6px 12px; font-size: 13px; text-align: right;">
+                        <span style="background-color: #e0e7ff; color: #4338ca; font-weight: 700; padding: 2px 8px; border-radius: 4px; font-size: 12px;">PENDING REVIEW</span>
+                      </td>
+                    </tr>
+                    ${
+                      refundRequest?.description
+                        ? `<tr>
+                            <td style="padding: 6px 12px; font-size: 13px; color: #64748b;" colspan="2">
+                              <div style="margin-top: 6px; padding: 8px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 12px; color: #475569;">
+                                <strong>Details:</strong> ${escapeHtml(refundRequest.description)}
+                              </div>
+                            </td>
+                          </tr>`
+                        : ''
+                    }
+                  </table>
+
+                  <p style="font-size: 14px; color: #64748b; line-height: 1.5; margin: 0;">
+                    We will notify you by email as soon as an administrator processes your refund request.
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td style="background-color: #f8fafc; padding: 24px 30px; border-top: 1px solid #e2e8f0; text-align: center;">
+                  <p style="font-size: 14px; color: #0f172a; font-weight: 600; margin: 0 0 4px 0;">Regards,</p>
+                  <p style="font-size: 14px; color: #3b82f6; font-weight: 700; margin: 0;">ExpertoStore</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+  `;
+
+  console.log(`[EmailService] Preparing Refund Request Received email for Order #${orderId} to: ${email}`);
+
+  try {
+    const transporter = createTransporter();
+    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+      const info = await transporter.sendMail({
+        from: fromEmail,
+        to: email,
+        subject,
+        text: plainText,
+        html: htmlContent,
+      });
+      console.log(`[EmailService] Refund Request Received email dispatched: ${info.messageId}`);
+      return { success: true, messageId: info.messageId };
+    } else {
+      console.log('[EmailService] SMTP credentials not provided in .env. Refund Request email simulated.');
+      return { success: true, simulated: true };
+    }
+  } catch (error) {
+    console.error(`[EmailService] Error sending Refund Request email: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Sends a notification email when a refund has been successfully executed via Stripe.
+ */
+const sendRefundSuccessEmail = async ({ order, refundRequest }) => {
+  const email = order?.customerEmail || refundRequest?.customerEmail;
+  if (!email) {
+    return { success: false, error: 'Customer email is missing' };
+  }
+
+  const customerName = refundRequest?.customerName || order?.customerName || 'Customer';
+  const orderId = order?._id ? order._id.toString() : refundRequest?.order ? refundRequest.order.toString() : 'N/A';
+  const refundAmount = refundRequest?.approvedAmount || order?.refundedAmount || order?.totalAmount;
+  const amountFormatted = formatCurrency(refundAmount, order?.currency || refundRequest?.currency);
+  const stripeRefundId = refundRequest?.stripeRefundId || order?.stripeRefundId || 'N/A';
+  const fromEmail = process.env.EMAIL_FROM || '"ExpertoStore" <no-reply@example.com>';
+  const subject = `Refund Successful - Order #${orderId}`;
+
+  const plainText = `Refund Successful\n\nHello ${customerName},\n\nYour refund has been successfully processed through Stripe.\n\nRefund Details:\n- Order ID: #${orderId}\n- Refund Amount: ${amountFormatted}\n- Stripe Refund Reference: ${stripeRefundId}\n- Refund Status: REFUNDED\n\nThe refunded amount will be returned to your original payment method.\n\nRegards,\nExpertoStore`;
+
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"><title>${escapeHtml(subject)}</title></head>
+    <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #334155;">
+      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="padding: 30px 10px;">
+        <tr>
+          <td align="center">
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); border: 1px solid #e2e8f0;">
+              <tr>
+                <td style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 32px 30px; text-align: center;">
+                  <div style="font-size: 22px; font-weight: 800; color: #ffffff; margin-bottom: 8px;">
+                    EXPERTO<span style="color: #38bdf8;">STORE</span>
+                  </div>
+                  <div style="display: inline-block; background-color: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 9999px; padding: 6px 16px; margin-top: 10px;">
+                    <span style="color: #34d399; font-size: 13px; font-weight: 600; text-transform: uppercase;">✓ Refund Processed Successfully</span>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 32px 30px;">
+                  <p style="font-size: 16px; color: #0f172a; margin-top: 0; font-weight: 600;">
+                    Hello ${escapeHtml(customerName)},
+                  </p>
+                  <p style="font-size: 15px; color: #475569; line-height: 1.6; margin-bottom: 24px;">
+                    Your refund has been successfully processed through Stripe. The refunded amount will be returned to your original payment method.
+                  </p>
+
+                  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 24px; padding: 16px;">
+                    <tr>
+                      <td style="padding: 6px 12px; font-size: 13px; color: #64748b;">Order ID:</td>
+                      <td style="padding: 6px 12px; font-size: 13px; color: #0f172a; font-weight: 600; text-align: right;">#${escapeHtml(orderId)}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 12px; font-size: 13px; color: #64748b;">Refund Amount:</td>
+                      <td style="padding: 6px 12px; font-size: 13px; color: #059669; font-weight: 700; text-align: right;">${escapeHtml(amountFormatted)}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 12px; font-size: 13px; color: #64748b;">Refund Status:</td>
+                      <td style="padding: 6px 12px; font-size: 13px; text-align: right;">
+                        <span style="background-color: #dcfce7; color: #15803d; font-weight: 700; padding: 2px 8px; border-radius: 4px; font-size: 12px;">REFUNDED</span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 12px; font-size: 13px; color: #64748b;">Stripe Refund ID:</td>
+                      <td style="padding: 6px 12px; font-size: 12px; color: #475569; font-family: monospace; text-align: right;">${escapeHtml(stripeRefundId)}</td>
+                    </tr>
+                  </table>
+
+                  <p style="font-size: 14px; color: #64748b; line-height: 1.5; margin: 0;">
+                    Depending on your card issuer or banking institution, funds typically appear in your account within a few business days.
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td style="background-color: #f8fafc; padding: 24px 30px; border-top: 1px solid #e2e8f0; text-align: center;">
+                  <p style="font-size: 14px; color: #0f172a; font-weight: 600; margin: 0 0 4px 0;">Regards,</p>
+                  <p style="font-size: 14px; color: #3b82f6; font-weight: 700; margin: 0;">ExpertoStore</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+  `;
+
+  console.log(`[EmailService] Preparing Refund Success email for Order #${orderId} to: ${email}`);
+
+  try {
+    const transporter = createTransporter();
+    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+      const info = await transporter.sendMail({
+        from: fromEmail,
+        to: email,
+        subject,
+        text: plainText,
+        html: htmlContent,
+      });
+      console.log(`[EmailService] Refund Success email dispatched: ${info.messageId}`);
+      return { success: true, messageId: info.messageId };
+    } else {
+      console.log('[EmailService] SMTP credentials not provided in .env. Refund Success email simulated.');
+      return { success: true, simulated: true };
+    }
+  } catch (error) {
+    console.error(`[EmailService] Error sending Refund Success email: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Sends a notification email when an administrator rejects a refund request.
+ */
+const sendRefundRejectedEmail = async ({ order, refundRequest, adminNote }) => {
+  const email = order?.customerEmail || refundRequest?.customerEmail;
+  if (!email) {
+    return { success: false, error: 'Customer email is missing' };
+  }
+
+  const customerName = refundRequest?.customerName || order?.customerName || 'Customer';
+  const orderId = order?._id ? order._id.toString() : refundRequest?.order ? refundRequest.order.toString() : 'N/A';
+  const note = adminNote || refundRequest?.adminNote || 'Does not meet refund policy criteria.';
+  const fromEmail = process.env.EMAIL_FROM || '"ExpertoStore" <no-reply@example.com>';
+  const subject = `Refund Request Rejected - Order #${orderId}`;
+
+  const plainText = `Refund Request Rejected\n\nHello ${customerName},\n\nYour refund request for order #${orderId} has been reviewed and rejected by our administration team.\n\nReason / Administrator Note:\n${note}\n\nIf you have further questions or require assistance, please reply directly to this email.\n\nRegards,\nExpertoStore`;
+
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"><title>${escapeHtml(subject)}</title></head>
+    <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #334155;">
+      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="padding: 30px 10px;">
+        <tr>
+          <td align="center">
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); border: 1px solid #e2e8f0;">
+              <tr>
+                <td style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 32px 30px; text-align: center;">
+                  <div style="font-size: 22px; font-weight: 800; color: #ffffff; margin-bottom: 8px;">
+                    EXPERTO<span style="color: #38bdf8;">STORE</span>
+                  </div>
+                  <div style="display: inline-block; background-color: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 9999px; padding: 6px 16px; margin-top: 10px;">
+                    <span style="color: #f87171; font-size: 13px; font-weight: 600; text-transform: uppercase;">✕ Refund Request Rejected</span>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 32px 30px;">
+                  <p style="font-size: 16px; color: #0f172a; margin-top: 0; font-weight: 600;">
+                    Hello ${escapeHtml(customerName)},
+                  </p>
+                  <p style="font-size: 15px; color: #475569; line-height: 1.6; margin-bottom: 24px;">
+                    After careful review, our administration team has determined that your refund request for order <strong>#${escapeHtml(orderId)}</strong> cannot be approved.
+                  </p>
+
+                  <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
+                    <p style="font-size: 13px; color: #991b1b; font-weight: 700; margin: 0 0 6px 0;">Reason / Review Note:</p>
+                    <p style="font-size: 13px; color: #7f1d1d; margin: 0; line-height: 1.5;">${escapeHtml(note)}</p>
+                  </div>
+
+                  <p style="font-size: 14px; color: #64748b; line-height: 1.5; margin: 0;">
+                    If you believe this decision was made in error or have additional information to provide, please reply to this email.
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td style="background-color: #f8fafc; padding: 24px 30px; border-top: 1px solid #e2e8f0; text-align: center;">
+                  <p style="font-size: 14px; color: #0f172a; font-weight: 600; margin: 0 0 4px 0;">Regards,</p>
+                  <p style="font-size: 14px; color: #3b82f6; font-weight: 700; margin: 0;">ExpertoStore</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+  `;
+
+  console.log(`[EmailService] Preparing Refund Rejected email for Order #${orderId} to: ${email}`);
+
+  try {
+    const transporter = createTransporter();
+    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+      const info = await transporter.sendMail({
+        from: fromEmail,
+        to: email,
+        subject,
+        text: plainText,
+        html: htmlContent,
+      });
+      console.log(`[EmailService] Refund Rejected email dispatched: ${info.messageId}`);
+      return { success: true, messageId: info.messageId };
+    } else {
+      console.log('[EmailService] SMTP credentials not provided in .env. Refund Rejected email simulated.');
+      return { success: true, simulated: true };
+    }
+  } catch (error) {
+    console.error(`[EmailService] Error sending Refund Rejected email: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Sends a notification email when a refund execution fails.
+ */
+const sendRefundFailedEmail = async ({ order, refundRequest, failureReason }) => {
+  const email = order?.customerEmail || refundRequest?.customerEmail;
+  if (!email) {
+    return { success: false, error: 'Customer email is missing' };
+  }
+
+  const customerName = refundRequest?.customerName || order?.customerName || 'Customer';
+  const orderId = order?._id ? order._id.toString() : refundRequest?.order ? refundRequest.order.toString() : 'N/A';
+  const fromEmail = process.env.EMAIL_FROM || '"ExpertoStore" <no-reply@example.com>';
+  const subject = `Refund Processing Failed - Order #${orderId}`;
+
+  const plainText = `Refund Processing Failed\n\nHello ${customerName},\n\nThe refund for order #${orderId} could not be processed at this time. Our support team will review the issue.\n\nRegards,\nExpertoStore`;
+
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"><title>${escapeHtml(subject)}</title></head>
+    <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #334155;">
+      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="padding: 30px 10px;">
+        <tr>
+          <td align="center">
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); border: 1px solid #e2e8f0;">
+              <tr>
+                <td style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 32px 30px; text-align: center;">
+                  <div style="font-size: 22px; font-weight: 800; color: #ffffff; margin-bottom: 8px;">
+                    EXPERTO<span style="color: #38bdf8;">STORE</span>
+                  </div>
+                  <div style="display: inline-block; background-color: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 9999px; padding: 6px 16px; margin-top: 10px;">
+                    <span style="color: #fbbf24; font-size: 13px; font-weight: 600; text-transform: uppercase;">⚠ Refund Processing Issue</span>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 32px 30px;">
+                  <p style="font-size: 16px; color: #0f172a; margin-top: 0; font-weight: 600;">
+                    Hello ${escapeHtml(customerName)},
+                  </p>
+                  <p style="font-size: 15px; color: #475569; line-height: 1.6; margin-bottom: 24px;">
+                    The refund for order <strong>#${escapeHtml(orderId)}</strong> could not be completed at this time due to a processing issue with the payment gateway.
+                  </p>
+                  <p style="font-size: 14px; color: #64748b; line-height: 1.5; margin: 0;">
+                    Our operations and technical teams have been notified and will review the transaction. If you have questions, please reply directly to this email.
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td style="background-color: #f8fafc; padding: 24px 30px; border-top: 1px solid #e2e8f0; text-align: center;">
+                  <p style="font-size: 14px; color: #0f172a; font-weight: 600; margin: 0 0 4px 0;">Regards,</p>
+                  <p style="font-size: 14px; color: #3b82f6; font-weight: 700; margin: 0;">ExpertoStore</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+  `;
+
+  console.log(`[EmailService] Preparing Refund Failed email for Order #${orderId} to: ${email}`);
+
+  try {
+    const transporter = createTransporter();
+    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+      const info = await transporter.sendMail({
+        from: fromEmail,
+        to: email,
+        subject,
+        text: plainText,
+        html: htmlContent,
+      });
+      console.log(`[EmailService] Refund Failed email dispatched: ${info.messageId}`);
+      return { success: true, messageId: info.messageId };
+    } else {
+      console.log('[EmailService] SMTP credentials not provided in .env. Refund Failed email simulated.');
+      return { success: true, simulated: true };
+    }
+  } catch (error) {
+    console.error(`[EmailService] Error sending Refund Failed email: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+};
+
 module.exports = {
   sendVerificationEmail,
   sendPromotionEmail,
   sendPaymentSuccessEmail,
   sendPaymentFailedEmail,
+  sendRefundRequestReceivedEmail,
+  sendRefundSuccessEmail,
+  sendRefundRejectedEmail,
+  sendRefundFailedEmail,
 };
+

@@ -407,7 +407,7 @@ export default function ProductsPage() {
                   <div>
                     <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Inventory Value</p>
                     <p className="text-2xl font-bold text-slate-800 mt-0.5">
-                      ${totalInventoryValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ₹ {totalInventoryValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
                   </div>
                   <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm">

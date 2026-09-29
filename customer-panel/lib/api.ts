@@ -66,6 +66,10 @@ export interface OrderDetail {
   currency: string;
   paymentStatus: 'pending' | 'paid' | 'failed' | 'refunded';
   orderStatus: 'pending' | 'confirmed' | 'cancelled' | 'processing' | 'completed';
+  refundStatus?: 'none' | 'requested' | 'processing' | 'partial' | 'refunded' | 'rejected' | 'failed';
+  refundedAmount?: number;
+  stripeRefundId?: string;
+  refundRequestId?: string | null;
   stripeCheckoutSessionId?: string;
   stripePaymentIntentId?: string;
   shippingAddress?: {
@@ -90,6 +94,38 @@ export interface CustomerOrdersResponse {
   success: boolean;
   count: number;
   orders: OrderDetail[];
+  message?: string;
+}
+
+export interface RefundRequestItem {
+  _id: string;
+  order: string | OrderDetail;
+  customer: string;
+  reason: string;
+  description?: string;
+  status: 'pending' | 'approved' | 'rejected' | 'processing' | 'refunded' | 'failed' | 'cancelled';
+  requestedAmount: number;
+  approvedAmount?: number;
+  currency: string;
+  stripeRefundId?: string;
+  adminNote?: string;
+  failureReason?: string;
+  requestedAt: string;
+  processedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RefundRequestResponse {
+  success: boolean;
+  refundRequest?: RefundRequestItem;
+  message?: string;
+}
+
+export interface MyRefundRequestsResponse {
+  success: boolean;
+  count: number;
+  refundRequests: RefundRequestItem[];
   message?: string;
 }
 
@@ -210,9 +246,11 @@ export async function getMyOrders(token: string): Promise<CustomerOrdersResponse
     cache: 'no-store',
   });
 
-  const data = await response.json();
+  const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data.message || 'Failed to retrieve orders history');
+    const error: any = new Error(data.message || 'Failed to retrieve orders history');
+    error.status = response.status;
+    throw error;
   }
   return data;
 }
@@ -251,6 +289,82 @@ export function getProductImageUrl(imagePath?: string): string {
   const cleanPath = imagePath.startsWith('/') ? imagePath : `/${imagePath}`;
   return `${API_BASE_URL}${cleanPath}`;
 }
+
+/**
+ * Submit a customer refund request for an eligible paid order
+ */
+export async function createRefundRequest(
+  orderId: string,
+  payload: { reason: string; description?: string },
+  token: string
+): Promise<RefundRequestResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}/refund-request`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error: any = new Error(data.message || 'Failed to submit refund request');
+    error.status = response.status;
+    throw error;
+  }
+  return data;
+}
+
+/**
+ * Fetch the existing refund request for a specific order
+ */
+export async function getOrderRefundRequest(
+  orderId: string,
+  token: string
+): Promise<RefundRequestResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}/refund-request`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    cache: 'no-store',
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error: any = new Error(data.message || 'Failed to fetch refund details');
+    error.status = response.status;
+    throw error;
+  }
+  return data;
+}
+
+/**
+ * Fetch all refund requests raised by the logged-in customer
+ */
+export async function getMyRefundRequests(
+  token: string
+): Promise<MyRefundRequestsResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/orders/my-refund-requests`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    cache: 'no-store',
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error: any = new Error(data.message || 'Failed to fetch refund requests');
+    error.status = response.status;
+    throw error;
+  }
+  return data;
+}
+
 
 
 

@@ -150,7 +150,7 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
 
             <div className="flex items-baseline space-x-3 pt-2">
               <span className="text-3xl font-black text-white">
-                ${Number(product.price).toFixed(2)}
+                ₹{Number(product.price).toFixed(2)}
               </span>
               <span className="text-xs text-gray-400">Tax & Shipping calculated at checkout</span>
             </div>

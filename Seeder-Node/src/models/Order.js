@@ -64,7 +64,7 @@ const orderSchema = new mongoose.Schema(
     },
     currency: {
       type: String,
-      default: 'usd',
+      default: 'inr',
       lowercase: true,
       trim: true,
     },

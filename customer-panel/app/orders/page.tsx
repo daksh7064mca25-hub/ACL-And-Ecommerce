@@ -141,11 +141,11 @@ export default function OrdersPage() {
                       </div>
                       <div>
                         <p className="font-semibold text-white">{item.title}</p>
-                        <p className="text-gray-500 text-[11px]">Qty: {item.quantity} × ${Number(item.priceAtPurchase).toFixed(2)}</p>
+                        <p className="text-gray-500 text-[11px]">Qty: {item.quantity} × ₹{Number(item.priceAtPurchase).toFixed(2)}</p>
                       </div>
                     </div>
                     <span className="font-bold text-white">
-                      ${(Number(item.priceAtPurchase) * item.quantity).toFixed(2)}
+                      ₹{(Number(item.priceAtPurchase) * item.quantity).toFixed(2)}
                     </span>
                   </div>
                 ))}
@@ -155,7 +155,7 @@ export default function OrdersPage() {
               <div className="pt-3 border-t border-gray-800/80 flex justify-between items-baseline">
                 <span className="text-xs text-gray-400">Total Paid via Stripe:</span>
                 <span className="text-lg font-black text-indigo-300">
-                  ${order.totalAmount.toFixed(2)}
+                  ₹{order.totalAmount.toFixed(2)}
                 </span>
               </div>
             </div>

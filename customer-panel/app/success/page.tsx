@@ -123,11 +123,11 @@ function SuccessContent() {
                     </div>
                     <div>
                       <p className="font-semibold text-white">{item.title}</p>
-                      <p className="text-gray-400">Qty: {item.quantity} × ${Number(item.priceAtPurchase).toFixed(2)}</p>
+                      <p className="text-gray-400">Qty: {item.quantity} × ₹{Number(item.priceAtPurchase).toFixed(2)}</p>
                     </div>
                   </div>
                   <span className="font-bold text-white">
-                    ${(Number(item.priceAtPurchase) * item.quantity).toFixed(2)}
+                    ₹{(Number(item.priceAtPurchase) * item.quantity).toFixed(2)}
                   </span>
                 </div>
               ))}
@@ -138,7 +138,7 @@ function SuccessContent() {
           <div className="pt-4 border-t border-gray-800 space-y-2 text-xs">
             <div className="flex justify-between text-gray-400">
               <span>Subtotal</span>
-              <span className="text-white font-medium">${order.totalAmount.toFixed(2)}</span>
+              <span className="text-white font-medium">₹{order.totalAmount.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-gray-400">
               <span>Shipping</span>
@@ -147,7 +147,7 @@ function SuccessContent() {
             <div className="flex justify-between text-base font-bold text-white pt-2 border-t border-gray-800/80">
               <span>Total Paid via Stripe</span>
               <span className="text-xl font-black text-indigo-300">
-                ${order.totalAmount.toFixed(2)}
+                ₹{order.totalAmount.toFixed(2)}
               </span>
             </div>
           </div>

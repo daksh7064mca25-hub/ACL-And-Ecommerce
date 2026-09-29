@@ -48,7 +48,7 @@ export default function CartItem({ item }: CartItemProps) {
             </h4>
           </Link>
           <p className="text-xs text-gray-400 mt-1">
-            Unit Price: <span className="text-gray-200 font-medium">${Number(product.price).toFixed(2)}</span>
+            Unit Price: <span className="text-gray-200 font-medium">₹{Number(product.price).toFixed(2)}</span>
           </p>
           <p className="text-xs text-gray-500 mt-0.5">
             Stock: <span className={maxStock <= 5 ? 'text-amber-400' : 'text-emerald-400'}>{maxStock} available</span>
@@ -91,7 +91,7 @@ export default function CartItem({ item }: CartItemProps) {
         {/* Item Total */}
         <div className="text-right min-w-[80px]">
           <span className="text-base font-bold text-white tracking-tight">
-            ${itemTotal.toFixed(2)}
+            ₹{itemTotal.toFixed(2)}
           </span>
         </div>
 

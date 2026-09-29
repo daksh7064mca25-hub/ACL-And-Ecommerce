@@ -30,7 +30,7 @@ export default function CartSummary({
       <div className="space-y-3.5 text-sm">
         <div className="flex justify-between text-gray-400">
           <span>Items ({totalItems})</span>
-          <span className="text-white font-medium">${subtotal.toFixed(2)}</span>
+          <span className="text-white font-medium">₹{subtotal.toFixed(2)}</span>
         </div>
 
         <div className="flex justify-between text-gray-400">
@@ -39,26 +39,26 @@ export default function CartSummary({
             {shipping === 0 ? (
               <span className="text-emerald-400 font-semibold">FREE</span>
             ) : (
-              `$${shipping.toFixed(2)}`
+              `₹${shipping.toFixed(2)}`
             )}
           </span>
         </div>
 
-        {subtotal > 0 && subtotal < 100 && (
+        {subtotal > 0 && subtotal < 500 && (
           <p className="text-[11px] text-indigo-300 bg-indigo-950/40 p-2 rounded-lg border border-indigo-500/20">
-            💡 Add ${(100 - subtotal).toFixed(2)} more for <strong>FREE Shipping</strong>!
+            💡 Add ₹{(500 - subtotal).toFixed(2)} more for <strong>FREE Shipping</strong>!
           </p>
         )}
 
         <div className="flex justify-between text-gray-400">
           <span>Estimated Tax (8%)</span>
-          <span className="text-white font-medium">${tax.toFixed(2)}</span>
+          <span className="text-white font-medium">₹{tax.toFixed(2)}</span>
         </div>
 
         <div className="pt-4 border-t border-gray-800 flex justify-between items-baseline">
           <span className="text-base font-bold text-white">Estimated Total</span>
           <span className="text-2xl font-black bg-gradient-to-r from-white via-gray-100 to-indigo-200 bg-clip-text text-transparent">
-            ${totalPrice.toFixed(2)}
+            ₹{totalPrice.toFixed(2)}
           </span>
         </div>
       </div>

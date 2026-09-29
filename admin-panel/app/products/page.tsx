@@ -562,7 +562,7 @@ export default function ProductsPage() {
                               {/* Price */}
                               <td className="py-3.5 px-4">
                                 <span className="font-semibold text-slate-900 text-xs">
-                                  ${product.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  ₹{product.price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </span>
                               </td>
 
@@ -724,7 +724,7 @@ export default function ProductsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Price ($) <span className="text-rose-500">*</span>
+                    Price (₹) <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -894,7 +894,7 @@ export default function ProductsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Price ($) <span className="text-rose-500">*</span>
+                    Price (₹) <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="number"

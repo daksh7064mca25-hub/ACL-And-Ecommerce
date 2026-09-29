@@ -94,7 +94,7 @@ export default function ProductCard({ product }: ProductCardProps) {
           </Link>
           <div className="mt-2.5 flex items-baseline justify-between">
             <span className="text-xl font-bold text-white tracking-tight">
-              ${Number(product.price).toFixed(2)}
+              ₹{Number(product.price).toFixed(2)}
             </span>
             <span className="text-xs text-gray-400">
               {product.quantity > 0 ? `${product.quantity} units available` : 'Sold out'}

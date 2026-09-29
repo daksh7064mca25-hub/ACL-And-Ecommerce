@@ -287,11 +287,11 @@ export default function CheckoutPage() {
                     </div>
                     <div>
                       <p className="font-semibold text-white truncate max-w-[200px] sm:max-w-xs">{item.product.title}</p>
-                      <p className="text-gray-400 mt-0.5">Qty: {item.quantity} × ${Number(item.product.price).toFixed(2)}</p>
+                      <p className="text-gray-400 mt-0.5">Qty: {item.quantity} × ₹{Number(item.product.price).toFixed(2)}</p>
                     </div>
                   </div>
                   <span className="font-bold text-white">
-                    ${((Number(item.product.price) || 0) * item.quantity).toFixed(2)}
+                    ₹{((Number(item.product.price) || 0) * item.quantity).toFixed(2)}
                   </span>
                 </div>
               ))}
@@ -332,7 +332,7 @@ export default function CheckoutPage() {
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-white">
-                    Ready to Pay ${totalPrice.toFixed(2)}
+                    Ready to Pay ₹{totalPrice.toFixed(2)}
                   </p>
                   <p className="text-xs text-gray-400 max-w-sm mx-auto">
                     Click the button below to load the secure Stripe card payment form directly inside this page.

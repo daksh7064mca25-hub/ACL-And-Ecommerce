@@ -2,6 +2,104 @@ const mongoose = require('mongoose');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
 const { getStripe } = require('../config/stripe');
+const { sendPaymentSuccessEmail } = require('../services/emailService');
+
+/**
+ * Synchronizes Order state with Stripe Checkout Session details.
+ * Ensures the contact email, name, shipping, payment status, inventory decrement,
+ * and payment success email are reliably processed.
+ */
+const syncOrderWithStripeSession = async (order, session) => {
+  if (!order || !session) return order;
+
+  // 1. Extract contact information email (prioritize customer_details from Stripe form)
+  const confirmedEmail =
+    session.customer_details?.email ||
+    session.customer_email ||
+    order.customerEmail;
+
+  if (confirmedEmail && typeof confirmedEmail === 'string' && confirmedEmail.includes('@')) {
+    order.customerEmail = confirmedEmail.toLowerCase().trim();
+  }
+
+  // 2. Extract customer name
+  const confirmedName =
+    session.customer_details?.name ||
+    order.customerName;
+
+  if (confirmedName && typeof confirmedName === 'string') {
+    order.customerName = confirmedName.trim();
+  }
+
+  // 3. Extract shipping address
+  const shipping = session.shipping_details?.address || session.customer_details?.address;
+  if (shipping) {
+    order.shippingAddress = {
+      line1: shipping.line1 || order.shippingAddress?.line1 || '',
+      line2: shipping.line2 || order.shippingAddress?.line2 || '',
+      city: shipping.city || order.shippingAddress?.city || '',
+      state: shipping.state || order.shippingAddress?.state || '',
+      postal_code: shipping.postal_code || order.shippingAddress?.postal_code || '',
+      country: shipping.country || order.shippingAddress?.country || '',
+    };
+  }
+
+  if (session.payment_intent && !order.stripePaymentIntentId) {
+    order.stripePaymentIntentId = session.payment_intent;
+  }
+
+  // 4. Process payment confirmation if Stripe reports paid
+  if (session.payment_status === 'paid') {
+    const isFirstTimePaid = order.paymentStatus !== 'paid';
+
+    if (isFirstTimePaid) {
+      // Decrement product inventory atomically
+      for (const item of order.items) {
+        try {
+          const updatedProduct = await Product.findByIdAndUpdate(
+            item.product,
+            { $inc: { quantity: -item.quantity } },
+            { new: true }
+          );
+          if (updatedProduct && updatedProduct.quantity < 0) {
+            await Product.findByIdAndUpdate(item.product, { quantity: 0 });
+          }
+          console.log(`[Order Sync] Decremented stock for '${item.title}' by ${item.quantity}. New stock: ${updatedProduct?.quantity}`);
+        } catch (itemErr) {
+          console.error(`[Order Sync Error] Failed to decrement inventory:`, itemErr.message);
+        }
+      }
+
+      order.paymentStatus = 'paid';
+      order.orderStatus = 'confirmed';
+      await order.save();
+      console.log(`[Order Sync] Order ${order._id} marked as PAID & CONFIRMED.`);
+    } else {
+      await order.save();
+    }
+
+    // 5. Send Payment Success Email (Idempotent)
+    if (!order.paymentSuccessEmailSent) {
+      try {
+        const emailResult = await sendPaymentSuccessEmail(order);
+        if (emailResult.success) {
+          order.paymentSuccessEmailSent = true;
+          await order.save();
+          console.log(`[Order Sync] Payment Success email dispatched to ${order.customerEmail}`);
+        } else {
+          console.warn(`[Order Sync Warning] Payment Success email could not be sent: ${emailResult.error}`);
+        }
+      } catch (mailErr) {
+        console.error(`[Order Sync Error] Failed to dispatch payment success email:`, mailErr.message);
+      }
+    }
+  } else if (session.status === 'expired' && order.paymentStatus !== 'paid') {
+    order.paymentStatus = 'failed';
+    await order.save();
+  }
+
+  return order;
+};
 
 /**
  * Create Stripe Checkout Session & Pending Order
@@ -86,15 +184,19 @@ const createCheckoutSession = async (req, res) => {
       calculatedTotal += realPrice * requestedQty;
     }
 
-    // 5. Determine customer email (from authenticated user or checkout input)
+    // 5. Determine customer email (honor explicit contact info from checkout; fallback to user account email)
     let email = customerEmail;
     let name = customerName;
     let customerUserId = null;
 
     if (req.user) {
       customerUserId = req.user._id;
-      if (!email) email = req.user.email;
-      if (!name) name = req.user.name;
+      if (!email || typeof email !== 'string' || !email.includes('@')) {
+        email = req.user.email;
+      }
+      if (!name) {
+        name = req.user.name;
+      }
     }
 
     if (!email || typeof email !== 'string' || !email.includes('@')) {
@@ -113,6 +215,8 @@ const createCheckoutSession = async (req, res) => {
       currency,
       paymentStatus: 'pending',
       orderStatus: 'pending',
+      paymentSuccessEmailSent: false,
+      paymentFailedEmailSent: false,
     });
 
     const customerFrontendUrl =
@@ -170,7 +274,7 @@ const createCheckoutSession = async (req, res) => {
     order.stripeCheckoutSessionId = session.id;
     await order.save();
 
-    console.log(`[Checkout] Created Stripe Embedded Checkout session ${session.id} for Order ${order._id}`);
+    console.log(`[Checkout] Created Stripe Embedded Checkout session ${session.id} for Order ${order._id} (Email: ${order.customerEmail})`);
 
     return res.status(200).json({
       success: true,
@@ -220,12 +324,25 @@ const getOrderById = async (req, res) => {
       });
     }
 
-    const order = await Order.findById(id).populate('items.product', 'title images quantity');
+    let order = await Order.findById(id).populate('items.product', 'title images quantity');
     if (!order) {
       return res.status(404).json({
         success: false,
         message: 'Order not found',
       });
+    }
+
+    // If order has a Stripe session and has not completed email dispatch or confirmation, verify directly with Stripe API
+    if (order.stripeCheckoutSessionId && (order.paymentStatus !== 'paid' || !order.paymentSuccessEmailSent)) {
+      try {
+        const stripe = getStripe();
+        const session = await stripe.checkout.sessions.retrieve(order.stripeCheckoutSessionId);
+        if (session) {
+          order = await syncOrderWithStripeSession(order, session);
+        }
+      } catch (stripeErr) {
+        console.warn(`[OrderController] Could not sync order with Stripe session: ${stripeErr.message}`);
+      }
     }
 
     return res.status(200).json({
@@ -256,7 +373,7 @@ const getOrderBySessionId = async (req, res) => {
       });
     }
 
-    const order = await Order.findOne({ stripeCheckoutSessionId: sessionId }).populate(
+    let order = await Order.findOne({ stripeCheckoutSessionId: sessionId }).populate(
       'items.product',
       'title images quantity'
     );
@@ -266,6 +383,19 @@ const getOrderBySessionId = async (req, res) => {
         success: false,
         message: 'Order not found for the provided Stripe session ID',
       });
+    }
+
+    // Verify session with Stripe backend API directly to guarantee payment confirmation and email delivery
+    if (order.paymentStatus !== 'paid' || !order.paymentSuccessEmailSent) {
+      try {
+        const stripe = getStripe();
+        const session = await stripe.checkout.sessions.retrieve(sessionId);
+        if (session) {
+          order = await syncOrderWithStripeSession(order, session);
+        }
+      } catch (stripeErr) {
+        console.warn(`[OrderController] Could not retrieve session from Stripe: ${stripeErr.message}`);
+      }
     }
 
     return res.status(200).json({

@@ -108,8 +108,10 @@ const handleStripeWebhook = async (req, res) => {
 
         if (session.customer_details?.email) {
           order.customerEmail = session.customer_details.email.toLowerCase().trim();
+        } else if (session.customer_email) {
+          order.customerEmail = session.customer_email.toLowerCase().trim();
         }
-        if (session.customer_details?.name && !order.customerName) {
+        if (session.customer_details?.name) {
           order.customerName = session.customer_details.name.trim();
         }
 

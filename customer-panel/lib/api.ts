@@ -4,12 +4,28 @@
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
+export interface ProductLocation {
+  type?: string;
+  coordinates?: [number, number]; // [longitude, latitude]
+  formattedAddress?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  postalCode?: string;
+}
+
 export interface ProductItem {
   _id: string;
   title: string;
   price: number;
   quantity: number;
   images: string[];
+  location?: ProductLocation;
+  distanceInKm?: number;
+  distanceInMeters?: number;
+  isDeliverable?: boolean;
+  deliverabilityMessage?: string;
+  assignedDeliveryZones?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -18,6 +34,51 @@ export interface ProductsResponse {
   success: boolean;
   count: number;
   products: ProductItem[];
+  message?: string;
+}
+
+export interface NearbyProductsResponse {
+  success: boolean;
+  count: number;
+  origin?: {
+    latitude: number;
+    longitude: number;
+  };
+  radiusKm?: number;
+  products: ProductItem[];
+  message?: string;
+}
+
+export interface DeliveryZoneSummary {
+  _id: string;
+  name: string;
+  code: string;
+  deliveryFee: number;
+  minOrderAmount: number;
+  estimatedDeliveryTime: string;
+  color?: string;
+  description?: string;
+  coverageType?: 'all_products' | 'specific_products' | 'specific_categories';
+}
+
+export interface DeliveryServiceabilityResponse {
+  success: boolean;
+  isServiceable: boolean;
+  coordinates: {
+    latitude: number;
+    longitude: number;
+  };
+  deliveryZone: DeliveryZoneSummary | null;
+  deliveryFee: number;
+  minOrderAmount: number;
+  estimatedDeliveryTime: string;
+  meetsMinOrder?: boolean;
+  minOrderShortfall?: number;
+  ineligibleItems?: {
+    productId: string;
+    title?: string;
+    reason: string;
+  }[];
   message?: string;
 }
 
@@ -36,6 +97,11 @@ export interface CheckoutRequest {
   items: CartCheckoutItem[];
   customerEmail?: string;
   customerName?: string;
+  deliveryLocation?: {
+    latitude: number;
+    longitude: number;
+    formattedAddress?: string;
+  };
 }
 
 export interface CheckoutResponse {
@@ -63,6 +129,15 @@ export interface OrderDetail {
   customerName?: string;
   items: OrderItemDetail[];
   totalAmount: number;
+  subtotalAmount?: number;
+  deliveryFee?: number;
+  deliveryZoneName?: string;
+  estimatedDeliveryTime?: string;
+  deliveryLocation?: {
+    type?: string;
+    coordinates?: [number, number]; // [lng, lat]
+    formattedAddress?: string;
+  };
   currency: string;
   paymentStatus: 'pending' | 'paid' | 'failed' | 'refunded';
   orderStatus: 'pending' | 'confirmed' | 'cancelled' | 'processing' | 'completed';
@@ -130,17 +205,23 @@ export interface MyRefundRequestsResponse {
 }
 
 /**
- * Fetch public products with optional search, sorting, and in-stock filter
+ * Fetch public products with optional search, sorting, in-stock filter, and delivery coordinates
  */
 export async function getPublicProducts(params?: {
   search?: string;
   sort?: string;
   inStock?: boolean;
+  lat?: number;
+  lng?: number;
 }): Promise<ProductsResponse> {
   const query = new URLSearchParams();
   if (params?.search) query.append('search', params.search);
   if (params?.sort) query.append('sort', params.sort);
   if (params?.inStock) query.append('inStock', 'true');
+  if (params?.lat !== undefined && params?.lng !== undefined) {
+    query.append('lat', params.lat.toString());
+    query.append('lng', params.lng.toString());
+  }
 
   const queryString = query.toString() ? `?${query.toString()}` : '';
   const response = await fetch(`${API_BASE_URL}/api/products${queryString}`, {
@@ -151,6 +232,43 @@ export async function getPublicProducts(params?: {
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data.message || 'Failed to fetch products');
+  }
+  return data;
+}
+
+/**
+ * Check delivery serviceability for a customer coordinate
+ */
+export async function checkDeliveryServiceability(params: {
+  lat: number;
+  lng: number;
+  items?: CartCheckoutItem[];
+  cartTotal?: number;
+}): Promise<DeliveryServiceabilityResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/delivery-zones/check-serviceability`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      latitude: params.lat,
+      longitude: params.lng,
+      items: params.items || [],
+      cartTotal: params.cartTotal || 0,
+    }),
+    cache: 'no-store',
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    return {
+      success: false,
+      isServiceable: false,
+      coordinates: { latitude: params.lat, longitude: params.lng },
+      deliveryZone: null,
+      deliveryFee: 0,
+      minOrderAmount: 0,
+      estimatedDeliveryTime: '',
+      message: data.message || 'Delivery serviceability check failed',
+    };
   }
   return data;
 }
@@ -364,6 +482,40 @@ export async function getMyRefundRequests(
   }
   return data;
 }
+
+/**
+ * Fetch nearby products using MongoDB geospatial $geoNear query
+ */
+export async function getNearbyProducts(params: {
+  lat: number;
+  lng: number;
+  radius?: number; // in km
+  search?: string;
+  inStock?: boolean;
+  limit?: number;
+}): Promise<NearbyProductsResponse> {
+  const query = new URLSearchParams();
+  query.append('lat', params.lat.toString());
+  query.append('lng', params.lng.toString());
+  if (params.radius !== undefined) query.append('radius', params.radius.toString());
+  if (params.search && params.search.trim()) query.append('search', params.search.trim());
+  if (params.inStock) query.append('inStock', 'true');
+  if (params.limit) query.append('limit', params.limit.toString());
+
+  const response = await fetch(`${API_BASE_URL}/api/products/nearby?${query.toString()}`, {
+    method: 'GET',
+    cache: 'no-store',
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error: any = new Error(data.message || 'Failed to search nearby products');
+    error.status = response.status;
+    throw error;
+  }
+  return data;
+}
+
 
 
 

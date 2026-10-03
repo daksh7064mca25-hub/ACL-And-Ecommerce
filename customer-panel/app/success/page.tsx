@@ -101,6 +101,28 @@ function SuccessContent() {
             </div>
           </div>
 
+          {/* Delivery Zone Information Snapshot */}
+          {(order.deliveryZoneName || order.deliveryLocation || (order.deliveryFee !== undefined && order.deliveryFee > 0)) && (
+            <div className="p-4 rounded-2xl bg-emerald-950/30 border border-emerald-500/30 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-emerald-300 flex items-center gap-1.5">
+                  <span>⚡ Express Zone Delivery:</span>
+                  <span className="text-white">{order.deliveryZoneName || 'Standard'}</span>
+                </span>
+                {order.estimatedDeliveryTime && (
+                  <span className="px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-200 border border-emerald-500/30 text-[11px] font-bold">
+                    Est. {order.estimatedDeliveryTime}
+                  </span>
+                )}
+              </div>
+              {order.deliveryLocation?.formattedAddress && (
+                <p className="text-gray-300 text-[11px]">
+                  📍 Destination: <strong>{order.deliveryLocation.formattedAddress}</strong>
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Purchased Items List */}
           <div className="space-y-3">
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
@@ -138,11 +160,19 @@ function SuccessContent() {
           <div className="pt-4 border-t border-gray-800 space-y-2 text-xs">
             <div className="flex justify-between text-gray-400">
               <span>Subtotal</span>
-              <span className="text-white font-medium">₹{order.totalAmount.toFixed(2)}</span>
+              <span className="text-white font-medium">
+                ₹{(order.subtotalAmount ?? (order.totalAmount - (order.deliveryFee ?? 0))).toFixed(2)}
+              </span>
             </div>
             <div className="flex justify-between text-gray-400">
-              <span>Shipping</span>
-              <span className="text-emerald-400 font-semibold">FREE</span>
+              <span>Delivery Charge</span>
+              <span className="text-white font-medium">
+                {order.deliveryFee === 0 || !order.deliveryFee ? (
+                  <span className="text-emerald-400 font-semibold">FREE</span>
+                ) : (
+                  `₹${order.deliveryFee.toFixed(2)}`
+                )}
+              </span>
             </div>
             <div className="flex justify-between text-base font-bold text-white pt-2 border-t border-gray-800/80">
               <span>Total Paid via Stripe</span>

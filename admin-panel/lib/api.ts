@@ -100,12 +100,23 @@ export interface DeleteRoleResponse {
   status?: number;
 }
 
+export interface ProductLocation {
+  type?: string;
+  coordinates?: [number, number]; // [longitude, latitude]
+  formattedAddress?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  postalCode?: string;
+}
+
 export interface ProductItem {
   _id: string;
   title: string;
   price: number;
   quantity: number;
   images: string[];
+  location?: ProductLocation;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -1157,6 +1168,325 @@ export async function rejectRefundRequest(
     };
   }
 }
+
+/**
+ * ==========================================================
+ * DELIVERY ZONES & SERVICEABILITY API CLIENT METHODS
+ * ==========================================================
+ */
+
+export interface DeliveryZoneBoundary {
+  type: 'Polygon';
+  coordinates: number[][][]; // Array of coordinate rings [[[longitude, latitude], ...]]
+}
+
+export interface DeliveryZoneItem {
+  _id: string;
+  name: string;
+  code: string;
+  description?: string;
+  boundary: DeliveryZoneBoundary;
+  deliveryFee: number;
+  minOrderAmount: number;
+  estimatedDeliveryTime: string;
+  priority: number;
+  isActive: boolean;
+  coverageType: 'all_products' | 'specific_products' | 'categories';
+  assignedProducts?: ProductItem[];
+  assignedCategories?: string[];
+  color?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface DeliveryZonesResponse {
+  success: boolean;
+  status: number;
+  count?: number;
+  deliveryZones?: DeliveryZoneItem[];
+  message?: string;
+}
+
+export interface SingleDeliveryZoneResponse {
+  success: boolean;
+  status: number;
+  deliveryZone?: DeliveryZoneItem;
+  message?: string;
+}
+
+export interface DeliveryZoneInput {
+  name: string;
+  code: string;
+  description?: string;
+  boundary: DeliveryZoneBoundary;
+  deliveryFee: number;
+  minOrderAmount: number;
+  estimatedDeliveryTime: string;
+  priority?: number;
+  isActive?: boolean;
+  coverageType?: 'all_products' | 'specific_products' | 'categories';
+  assignedProducts?: string[];
+  assignedCategories?: string[];
+  color?: string;
+}
+
+/**
+ * Fetch all delivery zones
+ */
+export async function getAdminDeliveryZones(
+  token?: string,
+  params?: { activeOnly?: boolean; search?: string }
+): Promise<DeliveryZonesResponse> {
+  const authToken = token || getToken();
+  if (!authToken) {
+    return {
+      success: false,
+      status: 401,
+      message: 'Authentication token missing. Please log in.',
+    };
+  }
+
+  const query = new URLSearchParams();
+  if (params?.activeOnly) query.append('activeOnly', 'true');
+  if (params?.search) query.append('search', params.search.trim());
+  const queryString = query.toString() ? `?${query.toString()}` : '';
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/delivery-zones${queryString}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+      },
+      cache: 'no-store',
+    });
+
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      return {
+        success: false,
+        status: response.status,
+        message: result?.message || `Failed to fetch delivery zones (Status: ${response.status})`,
+      };
+    }
+
+    return {
+      success: true,
+      status: response.status,
+      count: result?.count || 0,
+      deliveryZones: result?.deliveryZones || [],
+      message: result?.message,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      status: 0,
+      message: 'Network error: Unable to connect to backend server for delivery zones.',
+    };
+  }
+}
+
+/**
+ * Fetch single delivery zone by ID
+ */
+export async function getAdminDeliveryZoneById(
+  id: string,
+  token?: string
+): Promise<SingleDeliveryZoneResponse> {
+  const authToken = token || getToken();
+  if (!authToken) {
+    return {
+      success: false,
+      status: 401,
+      message: 'Authentication token missing. Please log in.',
+    };
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/delivery-zones/${id}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+      },
+      cache: 'no-store',
+    });
+
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      return {
+        success: false,
+        status: response.status,
+        message: result?.message || `Failed to fetch delivery zone (Status: ${response.status})`,
+      };
+    }
+
+    return {
+      success: true,
+      status: response.status,
+      deliveryZone: result?.deliveryZone,
+      message: result?.message,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      status: 0,
+      message: 'Network error: Unable to connect to backend server for delivery zone details.',
+    };
+  }
+}
+
+/**
+ * Create a new delivery zone
+ */
+export async function createAdminDeliveryZone(
+  payload: DeliveryZoneInput,
+  token?: string
+): Promise<SingleDeliveryZoneResponse> {
+  const authToken = token || getToken();
+  if (!authToken) {
+    return {
+      success: false,
+      status: 401,
+      message: 'Authentication token missing. Please log in.',
+    };
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/delivery-zones`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      return {
+        success: false,
+        status: response.status,
+        message: result?.message || `Failed to create delivery zone (Status: ${response.status})`,
+      };
+    }
+
+    return {
+      success: true,
+      status: response.status,
+      deliveryZone: result?.deliveryZone,
+      message: result?.message || 'Delivery zone created successfully.',
+    };
+  } catch (error) {
+    return {
+      success: false,
+      status: 0,
+      message: 'Network error: Unable to connect to backend server to create delivery zone.',
+    };
+  }
+}
+
+/**
+ * Update an existing delivery zone
+ */
+export async function updateAdminDeliveryZone(
+  id: string,
+  payload: Partial<DeliveryZoneInput>,
+  token?: string
+): Promise<SingleDeliveryZoneResponse> {
+  const authToken = token || getToken();
+  if (!authToken) {
+    return {
+      success: false,
+      status: 401,
+      message: 'Authentication token missing. Please log in.',
+    };
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/delivery-zones/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      return {
+        success: false,
+        status: response.status,
+        message: result?.message || `Failed to update delivery zone (Status: ${response.status})`,
+      };
+    }
+
+    return {
+      success: true,
+      status: response.status,
+      deliveryZone: result?.deliveryZone,
+      message: result?.message || 'Delivery zone updated successfully.',
+    };
+  } catch (error) {
+    return {
+      success: false,
+      status: 0,
+      message: 'Network error: Unable to connect to backend server to update delivery zone.',
+    };
+  }
+}
+
+/**
+ * Delete a delivery zone
+ */
+export async function deleteAdminDeliveryZone(
+  id: string,
+  token?: string
+): Promise<{ success: boolean; status: number; message?: string }> {
+  const authToken = token || getToken();
+  if (!authToken) {
+    return {
+      success: false,
+      status: 401,
+      message: 'Authentication token missing. Please log in.',
+    };
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/delivery-zones/${id}`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+      },
+    });
+
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      return {
+        success: false,
+        status: response.status,
+        message: result?.message || `Failed to delete delivery zone (Status: ${response.status})`,
+      };
+    }
+
+    return {
+      success: true,
+      status: response.status,
+      message: result?.message || 'Delivery zone deleted successfully.',
+    };
+  } catch (error) {
+    return {
+      success: false,
+      status: 0,
+      message: 'Network error: Unable to connect to backend server to delete delivery zone.',
+    };
+  }
+}
+
 
 
 

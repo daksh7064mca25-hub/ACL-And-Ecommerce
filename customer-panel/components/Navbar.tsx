@@ -5,26 +5,37 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
+import { useDeliveryLocation } from '@/context/DeliveryLocationContext';
 
 export default function Navbar() {
   const pathname = usePathname();
   const { totalItems, isMounted } = useCart();
   const { user, isAuthenticated, logout } = useAuth();
+  const {
+    location,
+    serviceability,
+    isDeliverable,
+    deliveryZone,
+    deliveryFee,
+    estimatedDeliveryTime,
+    openLocationModal,
+  } = useDeliveryLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
   const navLinks = [
     { name: 'Home', href: '/' },
     { name: 'Products', href: '/products' },
+    { name: 'Nearby Stores', href: '/nearby', badge: 'Map' },
     ...(isAuthenticated ? [{ name: 'My Orders', href: '/orders' }] : []),
   ];
 
   return (
     <header className="sticky top-0 z-50 bg-gray-950/80 backdrop-blur-md border-b border-gray-800/80 transition-all">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          {/* Brand Logo */}
-          <div className="flex items-center space-x-3">
+        <div className="flex items-center justify-between h-16 gap-3">
+          {/* Brand Logo & Delivery Location Picker */}
+          <div className="flex items-center space-x-3 sm:space-x-4">
             <Link href="/" className="flex items-center space-x-2.5 group">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/20 group-hover:scale-105 transition-transform duration-200">
                 <svg
@@ -45,6 +56,40 @@ export default function Navbar() {
                 Experto<span className="text-indigo-400">Store</span>
               </span>
             </Link>
+
+            {/* Delivery Location Selector Pill */}
+            <button
+              type="button"
+              onClick={openLocationModal}
+              className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-gray-900/80 hover:bg-gray-800/90 border border-gray-800 hover:border-indigo-500/50 text-left transition-all group"
+              title="Click to change delivery address & zone"
+            >
+              <div
+                className={`w-2 h-2 rounded-full ${
+                  isDeliverable ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'
+                }`}
+              />
+              <div className="hidden sm:flex flex-col text-left max-w-[140px] md:max-w-[170px]">
+                <span className="text-[10px] text-gray-400 font-medium leading-tight flex items-center gap-1">
+                  Deliver to
+                  <svg className="w-2.5 h-2.5 text-gray-500 group-hover:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </span>
+                <span className="text-xs font-semibold text-white truncate leading-tight">
+                  {location?.city || location?.address?.split(',')[0] || 'Select Location'}
+                </span>
+              </div>
+              {isDeliverable && deliveryZone ? (
+                <span className="hidden xl:inline-block text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-500/30">
+                  {deliveryZone.code} • ₹{deliveryFee}
+                </span>
+              ) : (
+                <span className="hidden xl:inline-block text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-950/80 text-red-400 border border-red-500/30">
+                  Out of Zone
+                </span>
+              )}
+            </button>
           </div>
 
           {/* Desktop Navigation Links */}
@@ -55,13 +100,18 @@ export default function Navbar() {
                 <Link
                   key={link.name}
                   href={link.href}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
+                  className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-1.5 transition-all duration-150 ${
                     isActive
                       ? 'text-white bg-gray-800/80 shadow-sm border border-gray-700/50'
                       : 'text-gray-300 hover:text-white hover:bg-gray-800/40'
                   }`}
                 >
-                  {link.name}
+                  <span>{link.name}</span>
+                  {link.badge && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-600/30 text-indigo-300 border border-indigo-500/40">
+                      📍 {link.badge}
+                    </span>
+                  )}
                 </Link>
               );
             })}
@@ -184,19 +234,48 @@ export default function Navbar() {
 
         {/* Mobile Navigation Dropdown */}
         {isMenuOpen && (
-          <div className="md:hidden py-3 border-t border-gray-800 space-y-1">
+          <div className="md:hidden py-3 border-t border-gray-800 space-y-2">
+            <button
+              type="button"
+              onClick={() => {
+                setIsMenuOpen(false);
+                openLocationModal();
+              }}
+              className="w-full flex items-center justify-between p-3 rounded-xl bg-gray-900 border border-gray-800 text-left"
+            >
+              <div className="flex items-center space-x-2.5">
+                <span
+                  className={`w-2.5 h-2.5 rounded-full ${
+                    isDeliverable ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'
+                  }`}
+                />
+                <div>
+                  <p className="text-[10px] text-gray-400 font-medium uppercase">Delivering to</p>
+                  <p className="text-xs font-bold text-white truncate max-w-[200px]">
+                    {location?.address || 'Select Address'}
+                  </p>
+                </div>
+              </div>
+              <span className="text-xs text-indigo-400 font-semibold">Change 📍</span>
+            </button>
+
             {navLinks.map((link) => (
               <Link
                 key={link.name}
                 href={link.href}
                 onClick={() => setIsMenuOpen(false)}
-                className={`block px-3 py-2 rounded-lg text-base font-medium ${
+                className={`flex items-center justify-between px-3 py-2 rounded-lg text-base font-medium ${
                   pathname === link.href
                     ? 'text-white bg-gray-800'
                     : 'text-gray-300 hover:text-white hover:bg-gray-800/50'
                 }`}
               >
-                {link.name}
+                <span>{link.name}</span>
+                {link.badge && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-600/30 text-indigo-300 border border-indigo-500/40">
+                    📍 {link.badge}
+                  </span>
+                )}
               </Link>
             ))}
           </div>

@@ -10,6 +10,7 @@ import {
 import CartSummary from '@/components/CartSummary';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
+import { useDeliveryLocation } from '@/context/DeliveryLocationContext';
 import {
   createCheckoutSession,
   getProductImageUrl,
@@ -17,8 +18,18 @@ import {
 } from '@/lib/api';
 
 export default function CheckoutPage() {
-  const { items, isMounted, totalPrice } = useCart();
+  const { items, isMounted, subtotal } = useCart();
   const { user, token } = useAuth();
+  const {
+    location,
+    serviceability,
+    isDeliverable,
+    deliveryZone,
+    deliveryFee,
+    estimatedDeliveryTime,
+    minOrderAmount,
+    openLocationModal,
+  } = useDeliveryLocation();
 
   const [customerEmail, setCustomerEmail] = useState(user?.email || '');
   const [customerName, setCustomerName] = useState(user?.name || '');
@@ -81,6 +92,24 @@ export default function CheckoutPage() {
         throw new Error('Please enter a valid email address before proceeding.');
       }
 
+      if (!location) {
+        throw new Error('Please select a valid delivery address before proceeding.');
+      }
+
+      if (!isDeliverable) {
+        throw new Error(
+          `Delivery is not available to your selected location (${location.address}). Please select an address within our delivery zones.`
+        );
+      }
+
+      if (minOrderAmount > 0 && subtotal < minOrderAmount) {
+        throw new Error(
+          `Minimum order amount for ${deliveryZone?.name || 'this zone'} is ₹${minOrderAmount}. Current subtotal is ₹${subtotal.toFixed(
+            2
+          )}.`
+        );
+      }
+
       const checkoutPayload = {
         items: items.map((item) => ({
           productId: item.product._id,
@@ -88,9 +117,18 @@ export default function CheckoutPage() {
         })),
         customerEmail: emailToUse,
         customerName: (customerName || user?.name || '').trim(),
+        deliveryLocation: {
+          latitude: location.lat,
+          longitude: location.lng,
+          formattedAddress: location.address,
+        },
       };
 
-      console.log('[Checkout Debug] Initiating embedded checkout session for order items:', checkoutPayload.items.length);
+      console.log(
+        '[Checkout Debug] Initiating checkout with delivery zone snapshot:',
+        deliveryZone?.name,
+        'Fee: ₹' + deliveryFee
+      );
       const response = await createCheckoutSession(checkoutPayload, token);
 
       if (!response.success || !response.clientSecret) {
@@ -104,17 +142,51 @@ export default function CheckoutPage() {
     } catch (err: any) {
       console.error('[Embedded Checkout Error]:', err);
       const errorMsg =
-        err.message || 'Failed to start payment. Please review your cart and try again.';
+        err.message || 'Failed to start payment. Please review your cart and delivery details.';
       setErrorMessage(errorMsg);
       setShowEmbeddedCheckout(false);
       throw err;
     }
-  }, [items, customerEmail, customerName, user, token]);
+  }, [
+    items,
+    customerEmail,
+    customerName,
+    user,
+    token,
+    location,
+    isDeliverable,
+    deliveryZone,
+    deliveryFee,
+    minOrderAmount,
+    subtotal,
+  ]);
 
   const handleStartPayment = () => {
     const emailToUse = (customerEmail || user?.email || '').trim();
     if (!emailToUse || !emailToUse.includes('@')) {
       setErrorMessage('Please provide a valid email address to receive your order receipt.');
+      return;
+    }
+
+    if (!location) {
+      setErrorMessage('Please select a delivery address to verify serviceability.');
+      openLocationModal();
+      return;
+    }
+
+    if (!isDeliverable) {
+      setErrorMessage(
+        `Selected location (${location.address}) is outside our delivery zones. Please update your delivery location.`
+      );
+      return;
+    }
+
+    if (minOrderAmount > 0 && subtotal < minOrderAmount) {
+      setErrorMessage(
+        `Minimum order amount for ${deliveryZone?.name || 'this zone'} is ₹${minOrderAmount}. Please add ₹${(
+          minOrderAmount - subtotal
+        ).toFixed(2)} more.`
+      );
       return;
     }
 
@@ -138,6 +210,8 @@ export default function CheckoutPage() {
     }),
     [fetchClientSecret]
   );
+
+  const grandTotal = Math.round((subtotal + (isDeliverable ? deliveryFee : 0) + (subtotal * 0.08)) * 100) / 100;
 
   if (!isMounted) {
     return (
@@ -170,7 +244,7 @@ export default function CheckoutPage() {
         <div>
           <h1 className="text-3xl font-black text-white tracking-tight">Checkout</h1>
           <p className="text-sm text-gray-400 mt-1">
-            Complete your order with secure embedded Stripe payment.
+            Complete your order with location-validated delivery and secure embedded Stripe payment.
           </p>
         </div>
         <div className="flex items-center space-x-2 text-xs text-emerald-400 bg-emerald-950/40 border border-emerald-500/20 px-3 py-1.5 rounded-xl w-fit">
@@ -189,7 +263,15 @@ export default function CheckoutPage() {
           <div>
             <p className="font-semibold">{errorMessage}</p>
             <p className="text-xs text-red-400 mt-1">
-              Need to modify items? Visit your <Link href="/cart" className="underline font-bold text-white">Cart</Link> to adjust quantities.
+              Need to modify items or location? Visit your <Link href="/cart" className="underline font-bold text-white">Cart</Link> or{' '}
+              <button
+                type="button"
+                onClick={openLocationModal}
+                className="underline font-bold text-white"
+              >
+                Change Address
+              </button>
+              .
             </p>
           </div>
         </div>
@@ -197,7 +279,7 @@ export default function CheckoutPage() {
 
       {/* Main Checkout Layout Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-        {/* Left 2 Columns: Contact Info, Items Review, Embedded Payment Form */}
+        {/* Left 2 Columns: Contact Info, Delivery Address Verification, Items Review, Payment */}
         <div className="lg:col-span-2 space-y-6">
           {/* Step 1: Contact Information */}
           <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-6 space-y-4 shadow-xl">
@@ -258,11 +340,91 @@ export default function CheckoutPage() {
             </div>
           </div>
 
-          {/* Step 2: Review Cart Items */}
+          {/* Step 2: Delivery Location & Zone Serviceability */}
+          <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-6 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-800">
+              <h3 className="text-base font-bold text-white flex items-center space-x-2">
+                <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 text-xs flex items-center justify-center font-bold">2</span>
+                <span>Delivery Address & Serviceability</span>
+              </h3>
+              <button
+                type="button"
+                onClick={openLocationModal}
+                disabled={showEmbeddedCheckout}
+                className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold disabled:opacity-50"
+              >
+                Change Address 📍
+              </button>
+            </div>
+
+            <div
+              className={`p-4 rounded-xl border ${
+                isDeliverable
+                  ? 'bg-gray-950/60 border-gray-800'
+                  : 'bg-red-950/30 border-red-500/40'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center space-x-2">
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        isDeliverable ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'
+                      }`}
+                    />
+                    <span className="text-xs font-bold uppercase tracking-wider text-gray-300">
+                      {isDeliverable ? 'Verified Delivery Zone' : 'Delivery Service Unavailable'}
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-white">
+                    {location?.address || 'No location selected'}
+                  </p>
+                  <p className="text-[11px] text-gray-500 font-mono">
+                    Coords: [{location?.lat.toFixed(4)}, {location?.lng.toFixed(4)}]
+                  </p>
+                </div>
+
+                {isDeliverable && deliveryZone && (
+                  <div className="text-right flex-shrink-0">
+                    <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-600/30 text-indigo-300 border border-indigo-500/40">
+                      {deliveryZone.code}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {isDeliverable && deliveryZone ? (
+                <div className="mt-3 pt-3 border-t border-gray-800/80 grid grid-cols-3 gap-2 text-center text-xs">
+                  <div className="bg-gray-900/80 rounded-lg p-2 border border-gray-800">
+                    <span className="text-[10px] text-gray-400 block">Delivery Zone</span>
+                    <span className="font-bold text-white truncate block">{deliveryZone.name}</span>
+                  </div>
+                  <div className="bg-gray-900/80 rounded-lg p-2 border border-gray-800">
+                    <span className="text-[10px] text-gray-400 block">Delivery Charge</span>
+                    <span className="font-bold text-emerald-400 block">
+                      {deliveryFee === 0 ? 'FREE' : `₹${deliveryFee}`}
+                    </span>
+                  </div>
+                  <div className="bg-gray-900/80 rounded-lg p-2 border border-gray-800">
+                    <span className="text-[10px] text-gray-400 block">Estimated Time</span>
+                    <span className="font-bold text-white block">{estimatedDeliveryTime}</span>
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-2 text-xs text-red-300">
+                  ⚠️ Your current delivery address is outside our serviceable delivery zones. Please
+                  click &quot;Change Address&quot; above to select an address in Chandigarh, Mohali,
+                  or Panchkula.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Step 3: Review Cart Items */}
           <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-6 space-y-4 shadow-xl">
             <div className="flex justify-between items-center pb-3 border-b border-gray-800">
               <h3 className="text-base font-bold text-white flex items-center space-x-2">
-                <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 text-xs flex items-center justify-center font-bold">2</span>
+                <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 text-xs flex items-center justify-center font-bold">3</span>
                 <span>Review Cart Items ({items.length})</span>
               </h3>
               <Link href="/cart" className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold">
@@ -298,11 +460,11 @@ export default function CheckoutPage() {
             </div>
           </div>
 
-          {/* Step 3: Payment Section (Stripe Embedded Checkout) */}
+          {/* Step 4: Payment Section (Stripe Embedded Checkout) */}
           <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-6 space-y-5 shadow-xl">
             <div className="flex items-center justify-between pb-3 border-b border-gray-800">
               <h3 className="text-base font-bold text-white flex items-center space-x-2">
-                <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 text-xs flex items-center justify-center font-bold">3</span>
+                <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 text-xs flex items-center justify-center font-bold">4</span>
                 <span>Secure Payment</span>
               </h3>
               <div className="flex items-center space-x-1.5 text-xs text-indigo-400 font-medium">
@@ -332,19 +494,27 @@ export default function CheckoutPage() {
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-white">
-                    Ready to Pay ₹{totalPrice.toFixed(2)}
+                    Ready to Pay ₹{grandTotal.toFixed(2)}
                   </p>
                   <p className="text-xs text-gray-400 max-w-sm mx-auto">
-                    Click the button below to load the secure Stripe card payment form directly inside this page.
+                    Click below to load the secure Stripe payment form with verified zone delivery.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={handleStartPayment}
-                  disabled={isInitializingPayment}
-                  className="px-6 py-3.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-sm shadow-lg shadow-indigo-500/25 transition-all active:scale-98 cursor-pointer"
+                  disabled={isInitializingPayment || !isDeliverable}
+                  className={`px-6 py-3.5 rounded-xl font-bold text-sm shadow-lg transition-all active:scale-98 ${
+                    !isDeliverable
+                      ? 'bg-gray-800 text-gray-500 border border-gray-700 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white shadow-indigo-500/25 cursor-pointer'
+                  }`}
                 >
-                  {isInitializingPayment ? 'Loading Payment Form...' : 'Proceed to Payment'}
+                  {isInitializingPayment
+                    ? 'Loading Payment Form...'
+                    : !isDeliverable
+                    ? 'Selected Location Undeliverable'
+                    : 'Proceed to Payment'}
                 </button>
               </div>
             )}

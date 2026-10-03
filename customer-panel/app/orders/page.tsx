@@ -273,6 +273,31 @@ export default function OrdersPage() {
                   ))}
                 </div>
 
+                {/* Delivery Zone Details Snapshot */}
+                {(order.deliveryZoneName || order.deliveryLocation || (order.deliveryFee !== undefined && order.deliveryFee > 0)) && (
+                  <div className="p-3 rounded-xl bg-gray-950/60 border border-gray-800/80 text-xs flex flex-wrap items-center justify-between gap-2 text-gray-300">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-emerald-400">⚡</span>
+                      <span className="font-semibold text-white">
+                        {order.deliveryZoneName || 'Delivery Zone'}
+                      </span>
+                      {order.estimatedDeliveryTime && (
+                        <span className="text-gray-400">• ~{order.estimatedDeliveryTime}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center space-x-3 text-[11px]">
+                      {order.deliveryLocation?.formattedAddress && (
+                        <span className="text-gray-400 truncate max-w-xs" title={order.deliveryLocation.formattedAddress}>
+                          📍 {order.deliveryLocation.formattedAddress}
+                        </span>
+                      )}
+                      <span className="px-2 py-0.5 rounded bg-gray-800 text-indigo-300 border border-gray-700 font-bold">
+                        Delivery Charge: ₹{order.deliveryFee ?? 0}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 {/* Bottom Row: Total & Refund Action */}
                 <div className="pt-3 border-t border-gray-800/80 flex flex-wrap justify-between items-center gap-4">
                   <div className="flex items-baseline space-x-2">
@@ -280,6 +305,11 @@ export default function OrdersPage() {
                     <span className="text-lg font-black text-indigo-300">
                       ₹{order.totalAmount.toFixed(2)}
                     </span>
+                    {order.subtotalAmount !== undefined && order.deliveryFee !== undefined && (
+                      <span className="text-[11px] text-gray-500 ml-1">
+                        (Subtotal: ₹{order.subtotalAmount.toFixed(2)} + Fee: ₹{order.deliveryFee})
+                      </span>
+                    )}
                     {order.refundedAmount && order.refundedAmount > 0 && (
                       <span className="text-xs text-emerald-400 font-semibold ml-2">
                         (Refunded: ₹{order.refundedAmount.toFixed(2)})

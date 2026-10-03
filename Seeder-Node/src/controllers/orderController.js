@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
+const DeliveryZone = require('../models/DeliveryZone');
 const { getStripe } = require('../config/stripe');
 const { sendPaymentSuccessEmail } = require('../services/emailService');
 
@@ -184,7 +185,93 @@ const createCheckoutSession = async (req, res) => {
       calculatedTotal += realPrice * requestedQty;
     }
 
-    // 5. Determine customer email (honor explicit contact info from checkout; fallback to user account email)
+    // 5. Serviceability & Delivery Zone Verification
+    let deliveryZoneId = null;
+    let deliveryZoneName = '';
+    let deliveryFee = 0;
+    let estimatedDeliveryTime = '';
+    let storedDeliveryLocation = undefined;
+
+    const { deliveryLocation } = req.body;
+    if (
+      deliveryLocation &&
+      (deliveryLocation.latitude !== undefined ||
+        deliveryLocation.lat !== undefined ||
+        deliveryLocation.coordinates)
+    ) {
+      const lat = Number(
+        deliveryLocation.latitude ?? deliveryLocation.lat ?? deliveryLocation.coordinates?.[1]
+      );
+      const lng = Number(
+        deliveryLocation.longitude ?? deliveryLocation.lng ?? deliveryLocation.coordinates?.[0]
+      );
+
+      if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+        const matchingZones = await DeliveryZone.find({
+          isActive: true,
+          boundary: {
+            $geoIntersects: {
+              $geometry: {
+                type: 'Point',
+                coordinates: [lng, lat],
+              },
+            },
+          },
+        })
+          .populate('assignedProducts')
+          .sort({ priority: -1, deliveryFee: 1 });
+
+        if (!matchingZones || matchingZones.length === 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'Your delivery location is outside our serviceable delivery zones.',
+          });
+        }
+
+        const selectedZone = matchingZones[0];
+
+        // Check specific products coverage
+        if (selectedZone.coverageType === 'specific_products') {
+          const allowedIds = new Set(
+            (selectedZone.assignedProducts || []).map((p) => p._id.toString())
+          );
+          for (const item of items) {
+            if (!allowedIds.has(item.productId.toString())) {
+              const unavailProd = productMap.get(item.productId.toString());
+              return res.status(400).json({
+                success: false,
+                message: `Product "${unavailProd?.title || 'Selected item'}" is not deliverable to ${selectedZone.name}.`,
+              });
+            }
+          }
+        }
+
+        // Check minimum order amount
+        if (calculatedTotal < selectedZone.minOrderAmount) {
+          return res.status(400).json({
+            success: false,
+            message: `Minimum order amount of ₹${selectedZone.minOrderAmount} required for ${selectedZone.name}. Current subtotal is ₹${calculatedTotal.toFixed(2)}.`,
+          });
+        }
+
+        deliveryZoneId = selectedZone._id;
+        deliveryZoneName = selectedZone.name;
+        deliveryFee = Number(selectedZone.deliveryFee || 0);
+        estimatedDeliveryTime = selectedZone.estimatedDeliveryTime || '30-45 mins';
+        storedDeliveryLocation = {
+          type: 'Point',
+          coordinates: [Number(lng.toFixed(6)), Number(lat.toFixed(6))],
+          address: deliveryLocation.formattedAddress || deliveryLocation.address || '',
+          formattedAddress: deliveryLocation.formattedAddress || deliveryLocation.address || '',
+          city: deliveryLocation.city || '',
+        };
+      }
+    }
+
+    const subtotalAmount = Math.round(calculatedTotal * 100) / 100;
+    const finalTotalAmount = Math.round((subtotalAmount + deliveryFee) * 100) / 100;
+
+    // 6. Determine customer email (honor explicit contact info from checkout; fallback to user account email)
     let email = customerEmail;
     let name = customerName;
     let customerUserId = null;
@@ -205,13 +292,19 @@ const createCheckoutSession = async (req, res) => {
 
     const currency = (process.env.STRIPE_CURRENCY || 'inr').toLowerCase();
 
-    // 6. Create Pending Order in MongoDB
+    // 7. Create Pending Order in MongoDB with Delivery Snapshot
     order = await Order.create({
       customer: customerUserId,
       customerEmail: email.toLowerCase().trim(),
       customerName: name ? name.trim() : '',
       items: orderItems,
-      totalAmount: Math.round(calculatedTotal * 100) / 100,
+      subtotalAmount,
+      deliveryFee,
+      totalAmount: finalTotalAmount,
+      deliveryZone: deliveryZoneId,
+      deliveryZoneName,
+      estimatedDeliveryTime,
+      deliveryLocation: storedDeliveryLocation,
       currency,
       paymentStatus: 'pending',
       orderStatus: 'pending',
@@ -223,7 +316,7 @@ const createCheckoutSession = async (req, res) => {
       process.env.CUSTOMER_FRONTEND_URL || 'http://localhost:3001';
     const backendUrl = process.env.BASE_URL || 'http://localhost:5000';
 
-    // 7. Live Stripe Checkout Session Creation
+    // 8. Live Stripe Checkout Session Creation
     const stripe = getStripe();
     const line_items = orderItems.map((item) => {
       let imageUrl = null;
@@ -251,6 +344,21 @@ const createCheckoutSession = async (req, res) => {
         quantity: item.quantity,
       };
     });
+
+    // Add Delivery Fee as a distinct Line Item in Stripe Checkout if applicable
+    if (deliveryFee > 0) {
+      line_items.push({
+        price_data: {
+          currency,
+          product_data: {
+            name: `Delivery Fee (${deliveryZoneName || 'Standard Delivery'})`,
+            description: `Estimated delivery: ${estimatedDeliveryTime || '30-45 mins'}`,
+          },
+          unit_amount: Math.round(deliveryFee * 100),
+        },
+        quantity: 1,
+      });
+    }
 
     const session = await stripe.checkout.sessions.create({
       ui_mode: 'embedded_page',

@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const path = require('path');
 const fs = require('fs');
 const Product = require('../models/Product');
+const DeliveryZone = require('../models/DeliveryZone');
 
 /**
  * Helper: Safely delete an image file from the uploads directory
@@ -36,12 +37,12 @@ const cleanupUploadedFiles = (files) => {
 };
 
 /**
- * Get all products with optional search, sorting, and stock filtering
+ * Get all products with optional search, sorting, stock, and location-based delivery filtering
  * GET /api/admin/products or GET /api/products
  */
 const getAllProducts = async (req, res) => {
   try {
-    const { search, sort, inStock } = req.query;
+    const { search, sort, inStock, lat, lng, onlyServiceable } = req.query;
     const filter = {};
 
     if (search && typeof search === 'string' && search.trim()) {
@@ -50,6 +51,66 @@ const getAllProducts = async (req, res) => {
 
     if (inStock === 'true' || inStock === true) {
       filter.quantity = { $gt: 0 };
+    }
+
+    let serviceability = null;
+    let allowedProductIds = null;
+
+    if (lat && lng) {
+      const latitude = Number(lat);
+      const longitude = Number(lng);
+
+      if (!isNaN(latitude) && !isNaN(longitude)) {
+        const matchingZones = await DeliveryZone.find({
+          isActive: true,
+          boundary: {
+            $geoIntersects: {
+              $geometry: {
+                type: 'Point',
+                coordinates: [longitude, latitude],
+              },
+            },
+          },
+        }).sort({ priority: -1, deliveryFee: 1 });
+
+        if (matchingZones.length > 0) {
+          const bestZone = matchingZones[0];
+          serviceability = {
+            serviceable: true,
+            zone: {
+              _id: bestZone._id,
+              name: bestZone.name,
+              code: bestZone.code,
+              deliveryFee: bestZone.deliveryFee,
+              minOrderAmount: bestZone.minOrderAmount,
+              estimatedDeliveryTime: bestZone.estimatedDeliveryTime,
+              coverageType: bestZone.coverageType,
+            },
+          };
+
+          if (bestZone.coverageType === 'specific_products') {
+            allowedProductIds = new Set(
+              (bestZone.assignedProducts || []).map((id) => id.toString())
+            );
+            if (onlyServiceable === 'true') {
+              filter._id = { $in: bestZone.assignedProducts || [] };
+            }
+          }
+        } else {
+          serviceability = {
+            serviceable: false,
+            message: 'Your selected location is outside our deliverable service area.',
+          };
+          if (onlyServiceable === 'true') {
+            return res.status(200).json({
+              success: true,
+              count: 0,
+              products: [],
+              serviceability,
+            });
+          }
+        }
+      }
     }
 
     let sortOption = { createdAt: -1 };
@@ -63,11 +124,25 @@ const getAllProducts = async (req, res) => {
       sortOption = { title: 1 };
     }
 
-    const products = await Product.find(filter).sort(sortOption);
+    const rawProducts = await Product.find(filter).sort(sortOption).lean();
+
+    const products = rawProducts.map((p) => {
+      let isDeliverable = true;
+      if (serviceability && !serviceability.serviceable) {
+        isDeliverable = false;
+      } else if (allowedProductIds && !allowedProductIds.has(p._id.toString())) {
+        isDeliverable = false;
+      }
+      return {
+        ...p,
+        isDeliverable,
+      };
+    });
 
     return res.status(200).json({
       success: true,
       count: products.length,
+      serviceability,
       products,
     });
   } catch (error) {
@@ -173,13 +248,53 @@ const createProduct = async (req, res) => {
       ? req.files.map((file) => `/uploads/products/${file.filename}`)
       : [];
 
-    // 5. Create Product Document
-    const newProduct = await Product.create({
+    // 5. Parse Location (if provided via form-data or JSON)
+    let productLocation = undefined;
+    let locationInput = req.body.location;
+
+    if (locationInput) {
+      if (typeof locationInput === 'string') {
+        try {
+          locationInput = JSON.parse(locationInput);
+        } catch {
+          locationInput = null;
+        }
+      }
+    }
+
+    const latVal = req.body.latitude !== undefined ? req.body.latitude : locationInput?.latitude ?? (locationInput?.coordinates ? locationInput.coordinates[1] : undefined);
+    const lngVal = req.body.longitude !== undefined ? req.body.longitude : locationInput?.longitude ?? (locationInput?.coordinates ? locationInput.coordinates[0] : undefined);
+
+    if (latVal !== undefined && lngVal !== undefined && latVal !== '' && lngVal !== '' && !isNaN(Number(latVal)) && !isNaN(Number(lngVal))) {
+      const latitude = Number(latVal);
+      const longitude = Number(lngVal);
+
+      if (latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180) {
+        productLocation = {
+          type: 'Point',
+          coordinates: [longitude, latitude], // GeoJSON order: [longitude, latitude]
+          formattedAddress: req.body.formattedAddress || locationInput?.formattedAddress || '',
+          city: req.body.city || locationInput?.city || '',
+          state: req.body.state || locationInput?.state || '',
+          country: req.body.country || locationInput?.country || 'India',
+          postalCode: req.body.postalCode || locationInput?.postalCode || '',
+        };
+      }
+    }
+
+    // 6. Create Product Document
+    const productPayload = {
       title: title.trim(),
       price: numPrice,
       quantity: numQuantity,
       images: imagePaths,
-    });
+    };
+
+    if (productLocation) {
+      productPayload.location = productLocation;
+    }
+
+    const newProduct = await Product.create(productPayload);
 
     return res.status(201).json({
       success: true,
@@ -308,6 +423,36 @@ const updateProduct = async (req, res) => {
     // Combine retained images with newly uploaded ones
     product.images = [...retainedImages, ...newImagePaths];
 
+    // 7. Handle Location Update
+    let locationInput = req.body.location;
+    if (locationInput && typeof locationInput === 'string') {
+      try {
+        locationInput = JSON.parse(locationInput);
+      } catch {
+        locationInput = null;
+      }
+    }
+
+    const latVal = req.body.latitude !== undefined ? req.body.latitude : locationInput?.latitude ?? (locationInput?.coordinates ? locationInput.coordinates[1] : undefined);
+    const lngVal = req.body.longitude !== undefined ? req.body.longitude : locationInput?.longitude ?? (locationInput?.coordinates ? locationInput.coordinates[0] : undefined);
+
+    if (latVal !== undefined && lngVal !== undefined && latVal !== '' && lngVal !== '' && !isNaN(Number(latVal)) && !isNaN(Number(lngVal))) {
+      const latitude = Number(latVal);
+      const longitude = Number(lngVal);
+
+      if (latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180) {
+        product.location = {
+          type: 'Point',
+          coordinates: [longitude, latitude],
+          formattedAddress: req.body.formattedAddress || locationInput?.formattedAddress || product.location?.formattedAddress || '',
+          city: req.body.city || locationInput?.city || product.location?.city || '',
+          state: req.body.state || locationInput?.state || product.location?.state || '',
+          country: req.body.country || locationInput?.country || product.location?.country || 'India',
+          postalCode: req.body.postalCode || locationInput?.postalCode || product.location?.postalCode || '',
+        };
+      }
+    }
+
     await product.save();
 
     return res.status(200).json({
@@ -321,6 +466,108 @@ const updateProduct = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message || 'Server error while updating product',
+    });
+  }
+};
+
+/**
+ * Get nearby products using MongoDB geospatial $geoNear aggregation
+ * GET /api/products/nearby
+ */
+const getNearbyProducts = async (req, res) => {
+  try {
+    const { lat, lng, radius = 25, search, inStock, limit = 50 } = req.query;
+
+    // 1. Validate required origin coordinates
+    if (lat === undefined || lng === undefined || lat === '' || lng === '') {
+      return res.status(400).json({
+        success: false,
+        message: 'Latitude (lat) and Longitude (lng) query parameters are required for nearby product search.',
+      });
+    }
+
+    const latitude = parseFloat(lat);
+    const longitude = parseFloat(lng);
+    const radiusKm = parseFloat(radius);
+
+    if (isNaN(latitude) || latitude < -90 || latitude > 90) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid latitude value. Must be a number between -90 and 90.',
+      });
+    }
+
+    if (isNaN(longitude) || longitude < -180 || longitude > 180) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid longitude value. Must be a number between -180 and 180.',
+      });
+    }
+
+    if (isNaN(radiusKm) || radiusKm <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid radius value. Must be a positive number in kilometers.',
+      });
+    }
+
+    // 2. Build additional match filters (search, inStock)
+    const maxDistanceMeters = radiusKm * 1000;
+    const matchQuery = {};
+
+    if (search && typeof search === 'string' && search.trim()) {
+      matchQuery.title = { $regex: search.trim(), $options: 'i' };
+    }
+
+    if (inStock === 'true' || inStock === true) {
+      matchQuery.quantity = { $gt: 0 };
+    }
+
+    // 3. Execute $geoNear geospatial aggregation pipeline
+    const pipeline = [
+      {
+        $geoNear: {
+          near: {
+            type: 'Point',
+            coordinates: [longitude, latitude], // GeoJSON [longitude, latitude]
+          },
+          distanceField: 'distanceInMeters',
+          maxDistance: maxDistanceMeters,
+          spherical: true,
+          query: matchQuery,
+        },
+      },
+      {
+        $addFields: {
+          distanceInKm: { $round: [{ $divide: ['$distanceInMeters', 1000] }, 2] },
+        },
+      },
+      {
+        $sort: { distanceInMeters: 1 },
+      },
+      {
+        $limit: parseInt(limit, 10) || 50,
+      },
+    ];
+
+    const products = await Product.aggregate(pipeline);
+
+    return res.status(200).json({
+      success: true,
+      count: products.length,
+      origin: {
+        latitude,
+        longitude,
+      },
+      radiusKm,
+      products,
+    });
+  } catch (error) {
+    console.error('[ProductController - getNearbyProducts Error]:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to search nearby products. Please verify your query parameters.',
+      error: error.message,
     });
   }
 };
@@ -371,7 +618,9 @@ const deleteProduct = async (req, res) => {
 module.exports = {
   getAllProducts,
   getProductById,
+  getNearbyProducts,
   createProduct,
   updateProduct,
   deleteProduct,
 };
+

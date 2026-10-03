@@ -13,7 +13,9 @@ import {
   updateProduct,
   deleteProduct,
   ProductItem,
+  ProductLocation,
 } from '@/lib/api';
+import LocationPicker from '@/components/LocationPicker';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
@@ -47,6 +49,7 @@ export default function ProductsPage() {
   const [formExistingImages, setFormExistingImages] = useState<string[]>([]);
   const [formNewFiles, setFormNewFiles] = useState<File[]>([]);
   const [formNewPreviews, setFormNewPreviews] = useState<string[]>([]);
+  const [formLocation, setFormLocation] = useState<ProductLocation | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -176,6 +179,14 @@ export default function ProductsPage() {
     setFormExistingImages([]);
     setFormNewFiles([]);
     setFormNewPreviews([]);
+    setFormLocation({
+      type: 'Point',
+      coordinates: [76.7794, 30.7333],
+      formattedAddress: 'Sector 17, Chandigarh, India',
+      city: 'Chandigarh',
+      state: 'Chandigarh',
+      country: 'India',
+    });
     setModalError(null);
     setIsCreateModalOpen(true);
   };
@@ -204,6 +215,10 @@ export default function ProductsPage() {
     formData.append('price', String(Number(formPrice)));
     formData.append('quantity', String(Number(formQuantity)));
 
+    if (formLocation) {
+      formData.append('location', JSON.stringify(formLocation));
+    }
+
     formNewFiles.forEach((file) => {
       formData.append('images', file);
     });
@@ -230,6 +245,16 @@ export default function ProductsPage() {
     setFormPrice(product.price);
     setFormQuantity(product.quantity);
     setFormExistingImages(product.images || []);
+    setFormLocation(
+      product.location || {
+        type: 'Point',
+        coordinates: [76.7794, 30.7333],
+        formattedAddress: 'Sector 17, Chandigarh, India',
+        city: 'Chandigarh',
+        state: 'Chandigarh',
+        country: 'India',
+      }
+    );
     setFormNewFiles([]);
     setFormNewPreviews([]);
     setModalError(null);
@@ -262,6 +287,10 @@ export default function ProductsPage() {
     formData.append('price', String(Number(formPrice)));
     formData.append('quantity', String(Number(formQuantity)));
     formData.append('existingImages', JSON.stringify(formExistingImages));
+
+    if (formLocation) {
+      formData.append('location', JSON.stringify(formLocation));
+    }
 
     formNewFiles.forEach((file) => {
       formData.append('images', file);
@@ -524,6 +553,7 @@ export default function ProductsPage() {
                           <th className="py-3.5 px-4">Product Details</th>
                           <th className="py-3.5 px-4">Price</th>
                           <th className="py-3.5 px-4">Inventory Stock</th>
+                          <th className="py-3.5 px-4">Location</th>
                           <th className="py-3.5 px-4">Images</th>
                           <th className="py-3.5 px-4">Added On</th>
                           <th className="py-3.5 px-4 text-right">Actions</th>
@@ -583,6 +613,23 @@ export default function ProductsPage() {
                                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                                     In Stock ({product.quantity})
                                   </span>
+                                )}
+                              </td>
+
+                              {/* Location */}
+                              <td className="py-3.5 px-4">
+                                {product.location?.coordinates && product.location.coordinates.length === 2 ? (
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-800">
+                                      <span className="text-indigo-600">📍</span>
+                                      {product.location.city || product.location.formattedAddress || 'Geo-tagged'}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 font-mono">
+                                      {product.location.coordinates[1].toFixed(3)}°N, {product.location.coordinates[0].toFixed(3)}°E
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-[11px] text-slate-400 italic">No location</span>
                                 )}
                               </td>
 
@@ -818,6 +865,14 @@ export default function ProductsPage() {
                 )}
               </div>
 
+              {/* Location Picker */}
+              <div className="pt-2">
+                <LocationPicker
+                  value={formLocation}
+                  onChange={(loc) => setFormLocation(loc)}
+                />
+              </div>
+
               {/* Actions */}
               <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
                 <button
@@ -1008,6 +1063,14 @@ export default function ProductsPage() {
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* Location Picker */}
+              <div className="pt-2">
+                <LocationPicker
+                  value={formLocation}
+                  onChange={(loc) => setFormLocation(loc)}
+                />
               </div>
 
               {/* Actions */}

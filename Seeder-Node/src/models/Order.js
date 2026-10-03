@@ -57,10 +57,62 @@ const orderSchema = new mongoose.Schema(
         'Order must contain at least one item',
       ],
     },
+    subtotalAmount: {
+      type: Number,
+      required: [true, 'Subtotal amount is required'],
+      min: [0, 'Subtotal amount must not be negative'],
+      default: 0,
+    },
+    deliveryFee: {
+      type: Number,
+      default: 0,
+      min: [0, 'Delivery fee must not be negative'],
+    },
     totalAmount: {
       type: Number,
       required: [true, 'Total amount is required'],
       min: [0, 'Total amount must not be negative'],
+    },
+    deliveryZone: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'DeliveryZone',
+      default: null,
+    },
+    deliveryZoneName: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    estimatedDeliveryTime: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    deliveryLocation: {
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: 'Point',
+      },
+      coordinates: {
+        type: [Number], // [longitude, latitude]
+        default: undefined,
+      },
+      address: {
+        type: String,
+        trim: true,
+        default: '',
+      },
+      formattedAddress: {
+        type: String,
+        trim: true,
+        default: '',
+      },
+      city: {
+        type: String,
+        trim: true,
+        default: '',
+      },
     },
     currency: {
       type: String,

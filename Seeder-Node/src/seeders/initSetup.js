@@ -6,6 +6,7 @@ const { connectDB, disconnectDB } = require('../config/db');
 const Permission = require('../models/Permission');
 const Role = require('../models/Role');
 const User = require('../models/User');
+const DeliveryZone = require('../models/DeliveryZone');
 
 const permissionsToCreate = [
   {
@@ -98,6 +99,26 @@ const permissionsToCreate = [
     display: 'Reject Refund Requests',
     description: 'Allows rejecting customer refund requests with an explanation note',
   },
+  {
+    name: 'delivery_zones:read',
+    display: 'View Delivery Zones',
+    description: 'Allows viewing configured geographical delivery zones and service areas',
+  },
+  {
+    name: 'delivery_zones:create',
+    display: 'Create Delivery Zones',
+    description: 'Allows drawing and adding new geographical delivery zones on the map',
+  },
+  {
+    name: 'delivery_zones:update',
+    display: 'Update Delivery Zones',
+    description: 'Allows modifying delivery zone boundaries, delivery fees, and minimum orders',
+  },
+  {
+    name: 'delivery_zones:delete',
+    display: 'Delete Delivery Zones',
+    description: 'Allows removing unused delivery zones from the system',
+  },
 ];
 
 const rolePermissionMapping = {
@@ -120,9 +141,13 @@ const rolePermissionMapping = {
     'refunds:read',
     'refunds:approve',
     'refunds:reject',
+    'delivery_zones:read',
+    'delivery_zones:create',
+    'delivery_zones:update',
+    'delivery_zones:delete',
   ],
-  Staff: ['dashboard:read', 'users:read', 'users:update'],
-  Rider: ['dashboard:read'],
+  Staff: ['dashboard:read', 'users:read', 'users:update', 'delivery_zones:read'],
+  Rider: ['dashboard:read', 'delivery_zones:read'],
   Customer: ['dashboard:read'],
 };
 
@@ -180,6 +205,145 @@ const createRoles = async (permissionMap) => {
   console.log('[Roles] Role initialization complete.\n');
 };
 
+const seedProductsWithLocations = async () => {
+  console.log('[Products] Checking and seeding default products with GeoJSON locations...');
+  const Product = require('../models/Product');
+
+  const defaultProducts = [
+    {
+      title: 'SaaS Motion & UI Animation Library',
+      price: 108,
+      quantity: 45,
+      images: [],
+      location: {
+        type: 'Point',
+        coordinates: [76.768066, 30.741482], // Chandigarh Sector 17 [lng, lat]
+        formattedAddress: 'Sector 17 Plaza, Chandigarh',
+        city: 'Chandigarh',
+        state: 'Chandigarh',
+        country: 'India',
+        postalCode: '160017',
+      },
+    },
+    {
+      title: '3D Futuristic Cyberpunk Assets',
+      price: 149,
+      quantity: 30,
+      images: [],
+      location: {
+        type: 'Point',
+        coordinates: [76.717873, 30.704649], // Mohali Phase 7 [lng, lat]
+        formattedAddress: 'Phase 7 Market, Sector 61, Mohali',
+        city: 'Mohali',
+        state: 'Punjab',
+        country: 'India',
+        postalCode: '160062',
+      },
+    },
+    {
+      title: 'Premium Brand Identity & Typography Kit',
+      price: 199,
+      quantity: 25,
+      images: [],
+      location: {
+        type: 'Point',
+        coordinates: [76.860565, 30.694209], // Panchkula Sector 5 [lng, lat]
+        formattedAddress: 'City Centre, Sector 5, Panchkula',
+        city: 'Panchkula',
+        state: 'Haryana',
+        country: 'India',
+        postalCode: '134109',
+      },
+    },
+    {
+      title: 'Fullstack Next.js 15 & Node.js Starter Kit',
+      price: 249,
+      quantity: 50,
+      images: [],
+      location: {
+        type: 'Point',
+        coordinates: [77.217722, 28.63042], // Connaught Place, New Delhi [lng, lat]
+        formattedAddress: 'Inner Circle, Connaught Place, New Delhi',
+        city: 'New Delhi',
+        state: 'Delhi',
+        country: 'India',
+        postalCode: '110001',
+      },
+    },
+    {
+      title: 'E-Commerce Tailwind Design System',
+      price: 79,
+      quantity: 60,
+      images: [],
+      location: {
+        type: 'Point',
+        coordinates: [77.624462, 12.935242], // Koramangala, Bengaluru [lng, lat]
+        formattedAddress: '80 Feet Road, 4th Block, Koramangala, Bengaluru',
+        city: 'Bengaluru',
+        state: 'Karnataka',
+        country: 'India',
+        postalCode: '560034',
+      },
+    },
+    {
+      title: 'Interactive 3D Three.js Web Experience Kit',
+      price: 189,
+      quantity: 20,
+      images: [],
+      location: {
+        type: 'Point',
+        coordinates: [72.829529, 19.059559], // Bandra West, Mumbai [lng, lat]
+        formattedAddress: 'Hill Road, Bandra West, Mumbai',
+        city: 'Mumbai',
+        state: 'Maharashtra',
+        country: 'India',
+        postalCode: '400050',
+      },
+    },
+  ];
+
+  for (const prodData of defaultProducts) {
+    const existing = await Product.findOne({ title: prodData.title });
+    if (existing) {
+      if (!existing.location || !existing.location.coordinates || existing.location.coordinates.length === 0) {
+        existing.location = prodData.location;
+        await existing.save();
+        console.log(`  - Updated product '${prodData.title}' with GeoJSON location.`);
+      }
+    } else {
+      await Product.create(prodData);
+      console.log(`  + Created product '${prodData.title}' with location (${prodData.location.city}).`);
+    }
+  }
+
+  // Also ensure any existing products without location get a default location
+  const unlocatedProducts = await Product.find({
+    $or: [{ location: { $exists: false } }, { 'location.coordinates': { $exists: false } }, { 'location.coordinates': { $size: 0 } }],
+  });
+
+  if (unlocatedProducts.length > 0) {
+    console.log(`  - Assigning default Chandigarh location to ${unlocatedProducts.length} unlocated product(s)...`);
+    for (let i = 0; i < unlocatedProducts.length; i++) {
+      const p = unlocatedProducts[i];
+      // Offset slightly to spread across Chandigarh tri-city
+      const offsetLat = 30.7333 + (i * 0.015) % 0.06;
+      const offsetLng = 76.7794 + (i * 0.015) % 0.06;
+      p.location = {
+        type: 'Point',
+        coordinates: [offsetLng, offsetLat],
+        formattedAddress: `Sector ${17 + i}, Chandigarh`,
+        city: 'Chandigarh',
+        state: 'Chandigarh',
+        country: 'India',
+        postalCode: '160017',
+      };
+      await p.save();
+    }
+  }
+
+  console.log('[Products] Product location seeding complete.\n');
+};
+
 const createAdmin = async () => {
   console.log('[Admin] Initializing default Admin user...');
 
@@ -219,6 +383,121 @@ const createAdmin = async () => {
   console.log('[Admin] Admin user initialization complete.\n');
 };
 
+const seedDeliveryZones = async () => {
+  console.log('[DeliveryZones] Checking and seeding delivery zones...');
+
+  const defaultZones = [
+    {
+      name: 'Chandigarh Core Express Zone',
+      code: 'CHD-EXP',
+      description: 'Ultra-fast 30-45 mins express delivery covering Chandigarh Sectors 1-38.',
+      boundary: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [76.740, 30.710],
+            [76.815, 30.710],
+            [76.815, 30.775],
+            [76.740, 30.775],
+            [76.740, 30.710],
+          ],
+        ],
+      },
+      deliveryFee: 30,
+      minOrderAmount: 100,
+      estimatedDeliveryTime: '30-45 mins',
+      priority: 5,
+      isActive: true,
+      coverageType: 'all_products',
+      color: '#4f46e5',
+    },
+    {
+      name: 'Mohali IT & Urban Zone',
+      code: 'MOH-URB',
+      description: 'Fast delivery covering Mohali Sectors 55 to 82 and Phase 1-11.',
+      boundary: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [76.670, 30.660],
+            [76.745, 30.660],
+            [76.745, 30.730],
+            [76.670, 30.730],
+            [76.670, 30.660],
+          ],
+        ],
+      },
+      deliveryFee: 45,
+      minOrderAmount: 150,
+      estimatedDeliveryTime: '45-60 mins',
+      priority: 4,
+      isActive: true,
+      coverageType: 'all_products',
+      color: '#059669',
+    },
+    {
+      name: 'Panchkula Express Zone',
+      code: 'PKL-EXP',
+      description: 'Scheduled express delivery covering Panchkula Urban Sectors 1-21.',
+      boundary: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [76.815, 30.650],
+            [76.890, 30.650],
+            [76.890, 30.730],
+            [76.815, 30.730],
+            [76.815, 30.650],
+          ],
+        ],
+      },
+      deliveryFee: 50,
+      minOrderAmount: 200,
+      estimatedDeliveryTime: '45-60 mins',
+      priority: 3,
+      isActive: true,
+      coverageType: 'all_products',
+      color: '#d97706',
+    },
+    {
+      name: 'Greater Tricity Super-Saver Zone',
+      code: 'TRI-SAVER',
+      description: 'Wide coverage zone covering greater Tricity, Kharar, Zirakpur, and Dera Bassi.',
+      boundary: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [76.640, 30.600],
+            [76.920, 30.600],
+            [76.920, 30.820],
+            [76.640, 30.820],
+            [76.640, 30.600],
+          ],
+        ],
+      },
+      deliveryFee: 75,
+      minOrderAmount: 350,
+      estimatedDeliveryTime: 'Same Day (2-4 hrs)',
+      priority: 1,
+      isActive: true,
+      coverageType: 'all_products',
+      color: '#7c3aed',
+    },
+  ];
+
+  for (const zoneData of defaultZones) {
+    const existing = await DeliveryZone.findOne({ code: zoneData.code });
+    if (existing) {
+      console.log(`  - Delivery Zone '${zoneData.name}' (${zoneData.code}) exists. Skipping.`);
+    } else {
+      const created = await DeliveryZone.create(zoneData);
+      console.log(`  + Delivery Zone '${created.name}' (${created.code}) created (Fee: ₹${created.deliveryFee}, Min: ₹${created.minOrderAmount}).`);
+    }
+  }
+
+  console.log('[DeliveryZones] Delivery zones seeding complete.\n');
+};
+
 const initSetup = async () => {
   console.log('========================================');
   console.log('  STARTING DATABASE INITIALIZATION SETUP');
@@ -231,6 +510,8 @@ const initSetup = async () => {
     const permissionMap = await createPermissions();
     await createRoles(permissionMap);
     await createAdmin();
+    await seedProductsWithLocations();
+    await seedDeliveryZones();
 
     console.log('========================================');
     console.log('  DATABASE INITIALIZATION SUCCESSFUL!   ');

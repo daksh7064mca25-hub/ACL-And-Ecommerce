@@ -56,8 +56,8 @@ export default function ProductCard({ product }: ProductCardProps) {
           </div>
         )}
 
-        {/* Stock Badge Overlay */}
-        <div className="absolute top-3 left-3 z-10">
+        {/* Stock & Deliverability Badge Overlay */}
+        <div className="absolute top-3 left-3 z-10 flex flex-col gap-1.5 items-start">
           {isOutOfStock ? (
             <span className="px-2.5 py-1 text-[11px] font-bold rounded-full bg-red-500/20 text-red-400 border border-red-500/30 backdrop-blur-md">
               Out of Stock
@@ -69,6 +69,17 @@ export default function ProductCard({ product }: ProductCardProps) {
           ) : (
             <span className="px-2.5 py-1 text-[11px] font-medium rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 backdrop-blur-md">
               In Stock
+            </span>
+          )}
+
+          {product.isDeliverable === false && (
+            <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-red-950/80 text-red-300 border border-red-500/40 backdrop-blur-md">
+              ⚠️ Undeliverable
+            </span>
+          )}
+          {product.isDeliverable === true && (
+            <span className="px-2 py-0.5 text-[10px] font-semibold rounded-md bg-indigo-950/80 text-indigo-300 border border-indigo-500/40 backdrop-blur-md">
+              ⚡ Deliverable
             </span>
           )}
         </div>
@@ -97,7 +108,7 @@ export default function ProductCard({ product }: ProductCardProps) {
               ₹{Number(product.price).toFixed(2)}
             </span>
             <span className="text-xs text-gray-400">
-              {product.quantity > 0 ? `${product.quantity} units available` : 'Sold out'}
+              {product.quantity > 0 ? `${product.quantity} in stock` : 'Sold out'}
             </span>
           </div>
         </div>
@@ -120,9 +131,9 @@ export default function ProductCard({ product }: ProductCardProps) {
 
           <button
             onClick={handleQuickAdd}
-            disabled={isOutOfStock || isAdding}
+            disabled={isOutOfStock || isAdding || product.isDeliverable === false}
             className={`flex-1 py-2 px-3 text-xs font-semibold rounded-xl flex items-center justify-center space-x-1.5 transition-all ${
-              isOutOfStock
+              isOutOfStock || product.isDeliverable === false
                 ? 'bg-gray-800/40 text-gray-500 border border-gray-800 cursor-not-allowed'
                 : 'bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white shadow-md shadow-indigo-600/20'
             }`}
@@ -130,7 +141,13 @@ export default function ProductCard({ product }: ProductCardProps) {
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>
-            <span>{isOutOfStock ? 'Unavailable' : 'Add'}</span>
+            <span>
+              {isOutOfStock
+                ? 'Out of Stock'
+                : product.isDeliverable === false
+                ? 'No Delivery'
+                : 'Add'}
+            </span>
           </button>
         </div>
       </div>

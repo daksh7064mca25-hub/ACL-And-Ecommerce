@@ -4,6 +4,7 @@ const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const productRoutes = require('./routes/productRoutes');
 const orderRoutes = require('./routes/orderRoutes');
+const deliveryZoneRoutes = require('./routes/deliveryZoneRoutes');
 const webhookRoutes = require('./routes/webhookRoutes');
 
 const app = express();
@@ -50,6 +51,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/delivery-zones', deliveryZoneRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/stripe', webhookRoutes);
 

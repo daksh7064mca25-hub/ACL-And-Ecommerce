@@ -8,6 +8,11 @@ const {
   sendRefundRejectedEmail,
   sendRefundFailedEmail,
 } = require('../services/emailService');
+const {
+  emitRefundRequested,
+  emitRefundStatusUpdated,
+  emitOrderStatusUpdated,
+} = require('../services/socketService');
 
 const VALID_REASONS = [
   'Product is incorrect',
@@ -117,6 +122,14 @@ const createRefundRequest = async (req, res) => {
       await sendRefundRequestReceivedEmail({ order, refundRequest });
     } catch (mailErr) {
       console.error('[Refund Controller Error] Failed to send refund request confirmation email:', mailErr.message);
+    }
+
+    // 9. Emit real-time refund:requested event to Admin room
+    try {
+      emitRefundRequested(refundRequest, order);
+      emitOrderStatusUpdated(order);
+    } catch (sockErr) {
+      console.error('[Refund Controller] Socket emit error on refund request:', sockErr.message);
     }
 
     return res.status(201).json({
@@ -450,6 +463,14 @@ const approveRefundRequestAdmin = async (req, res) => {
       console.error('[Refund Controller Error] Failed to send refund success email:', mailErr.message);
     }
 
+    // 9. Emit real-time refund status updated event
+    try {
+      emitRefundStatusUpdated(refundRequest, order);
+      emitOrderStatusUpdated(order);
+    } catch (sockErr) {
+      console.error('[Refund Controller] Socket emit error on refund approval:', sockErr.message);
+    }
+
     return res.status(200).json({
       success: true,
       message: 'Refund approved and executed successfully via Stripe.',
@@ -552,6 +573,14 @@ const rejectRefundRequestAdmin = async (req, res) => {
     }
 
     console.log(`[Refund Controller] Admin #${req.user._id} rejected RefundRequest #${refundRequest._id}`);
+
+    // Emit real-time refund status updated event
+    try {
+      emitRefundStatusUpdated(refundRequest, order);
+      if (order) emitOrderStatusUpdated(order);
+    } catch (sockErr) {
+      console.error('[Refund Controller] Socket emit error on refund rejection:', sockErr.message);
+    }
 
     return res.status(200).json({
       success: true,

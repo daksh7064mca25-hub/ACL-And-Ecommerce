@@ -3,6 +3,10 @@ const path = require('path');
 const fs = require('fs');
 const Product = require('../models/Product');
 const DeliveryZone = require('../models/DeliveryZone');
+const {
+  emitProductCreated,
+  emitProductUpdated,
+} = require('../services/socketService');
 
 /**
  * Helper: Safely delete an image file from the uploads directory
@@ -296,6 +300,13 @@ const createProduct = async (req, res) => {
 
     const newProduct = await Product.create(productPayload);
 
+    // Emit real-time product created event
+    try {
+      emitProductCreated(newProduct);
+    } catch (sockErr) {
+      console.error('[ProductController] Socket emit error on product creation:', sockErr.message);
+    }
+
     return res.status(201).json({
       success: true,
       message: 'Product created successfully',
@@ -454,6 +465,13 @@ const updateProduct = async (req, res) => {
     }
 
     await product.save();
+
+    // Emit real-time product updated & stock updated events
+    try {
+      emitProductUpdated(product);
+    } catch (sockErr) {
+      console.error('[ProductController] Socket emit error on product update:', sockErr.message);
+    }
 
     return res.status(200).json({
       success: true,

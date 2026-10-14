@@ -11,6 +11,7 @@ import {
   rejectRefundRequest,
   AdminRefundRequest,
 } from '@/lib/api';
+import { useSocket } from '@/context/SocketContext';
 
 export default function RefundsPage() {
   const router = useRouter();
@@ -19,6 +20,7 @@ export default function RefundsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [admin, setAdmin] = useState<AdminUser | null>(null);
   const [refundRequests, setRefundRequests] = useState<AdminRefundRequest[]>([]);
+  const { onRefundRequested, onRefundStatusUpdated } = useSocket();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -80,6 +82,34 @@ export default function RefundsPage() {
     setMounted(true);
     loadData();
   }, [router]);
+
+  // Real-time Socket.IO listeners for instant refund updates
+  useEffect(() => {
+    const unsubRequested = onRefundRequested(() => {
+      // Refresh list to pull full populated order & customer details
+      loadData();
+    });
+
+    const unsubStatus = onRefundStatusUpdated((data) => {
+      setRefundRequests((prev) =>
+        prev.map((r) =>
+          r._id === data.refundRequestId
+            ? {
+                ...r,
+                status: (data.status as any) || r.status,
+                adminNote: data.adminNote !== undefined ? data.adminNote : r.adminNote,
+                approvedAmount: data.approvedAmount !== undefined ? data.approvedAmount : r.approvedAmount,
+              }
+            : r
+        )
+      );
+    });
+
+    return () => {
+      unsubRequested();
+      unsubStatus();
+    };
+  }, [onRefundRequested, onRefundStatusUpdated]);
 
   // Filtered requests based on search and status
   const filteredRequests = useMemo(() => {

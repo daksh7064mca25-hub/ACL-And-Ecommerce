@@ -487,6 +487,121 @@ const deleteRole = async (req, res) => {
   }
 };
 
+/**
+ * Get all delivery riders
+ * GET /api/admin/riders
+ */
+const getRiders = async (req, res) => {
+  try {
+    const riderRole = await Role.findOne({ name: 'Rider' });
+    if (!riderRole) {
+      return res.status(200).json({
+        success: true,
+        riders: [],
+      });
+    }
+
+    const riders = await User.find({ role: riderRole._id })
+      .select('name email phone role createdAt')
+      .populate('role', 'name display')
+      .sort({ name: 1 });
+
+    return res.status(200).json({
+      success: true,
+      count: riders.length,
+      riders,
+    });
+  } catch (error) {
+    console.error('[AdminController - getRiders Error]:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve riders list',
+    });
+  }
+};
+
+/**
+ * Assign a rider to an order
+ * PUT /api/admin/orders/:id/assign-rider
+ * Body: { riderId: string }
+ */
+const assignRiderToOrder = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { riderId } = req.body;
+
+    const Order = require('../models/Order');
+    const { emitDeliveryAssigned } = require('../services/socketService');
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid order ID format',
+      });
+    }
+
+    if (!riderId || !mongoose.Types.ObjectId.isValid(riderId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid riderId is required',
+      });
+    }
+
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found',
+      });
+    }
+
+    const rider = await User.findById(riderId).populate('role');
+    if (!rider) {
+      return res.status(404).json({
+        success: false,
+        message: 'Rider not found',
+      });
+    }
+
+    if (!rider.role || rider.role.name !== 'Rider') {
+      return res.status(400).json({
+        success: false,
+        message: 'The selected user is not a delivery rider',
+      });
+    }
+
+    // Update assignment details
+    order.assignedRider = rider._id;
+    order.assignedRiderName = rider.name;
+    order.assignedRiderPhone = rider.phone || '';
+    order.deliveryStatus = 'assigned';
+    order.assignedAt = new Date();
+
+    await order.save();
+
+    console.log(`[AdminController] Assigned rider ${rider.name} (${rider._id}) to Order #${order._id}`);
+
+    // Emit real-time delivery:assigned event
+    try {
+      emitDeliveryAssigned(order, rider);
+    } catch (sockErr) {
+      console.error('[AdminController] Socket emit error on rider assignment:', sockErr.message);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Rider ${rider.name} assigned to order successfully`,
+      order,
+    });
+  } catch (error) {
+    console.error('[AdminController - assignRiderToOrder Error]:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to assign rider to order',
+    });
+  }
+};
+
 module.exports = {
   getCustomers,
   sendPromotion,
@@ -496,5 +611,8 @@ module.exports = {
   createRole,
   updateRole,
   deleteRole,
+  getRiders,
+  assignRiderToOrder,
 };
+
 

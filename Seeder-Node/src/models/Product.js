@@ -1,5 +1,45 @@
 const mongoose = require('mongoose');
 
+const locationSchema = new mongoose.Schema(
+  {
+    type: {
+      type: String,
+      enum: ['Point'],
+      default: 'Point',
+    },
+    coordinates: {
+      type: [Number], // [longitude, latitude] per GeoJSON standard
+      required: true,
+    },
+    formattedAddress: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    city: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    state: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    country: {
+      type: String,
+      trim: true,
+      default: 'India',
+    },
+    postalCode: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+  },
+  { _id: false }
+);
+
 const productSchema = new mongoose.Schema(
   {
     title: {
@@ -26,40 +66,8 @@ const productSchema = new mongoose.Schema(
     ],
     // GeoJSON Point location for geospatial queries ($near, $geoNear, $geoWithin)
     location: {
-      type: {
-        type: String,
-        enum: ['Point'],
-        default: 'Point',
-      },
-      coordinates: {
-        type: [Number], // [longitude, latitude] per GeoJSON standard
-        required: false,
-      },
-      formattedAddress: {
-        type: String,
-        trim: true,
-        default: '',
-      },
-      city: {
-        type: String,
-        trim: true,
-        default: '',
-      },
-      state: {
-        type: String,
-        trim: true,
-        default: '',
-      },
-      country: {
-        type: String,
-        trim: true,
-        default: 'India',
-      },
-      postalCode: {
-        type: String,
-        trim: true,
-        default: '',
-      },
+      type: locationSchema,
+      default: undefined,
     },
   },
   {

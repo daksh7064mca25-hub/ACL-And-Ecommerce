@@ -9,6 +9,13 @@ const {
   sendRefundSuccessEmail,
   sendRefundFailedEmail,
 } = require('../services/emailService');
+const {
+  emitStockUpdated,
+  emitPaymentSuccess,
+  emitPaymentFailed,
+  emitOrderStatusUpdated,
+  emitRefundStatusUpdated,
+} = require('../services/socketService');
 
 /**
  * Stripe Webhook Handler
@@ -102,6 +109,13 @@ const handleStripeWebhook = async (req, res) => {
             }
 
             console.log(`[Stripe Webhook] Decremented stock for product '${item.title}' by ${item.quantity}. New stock: ${updatedProduct?.quantity}`);
+
+            // Emit real-time stock update
+            try {
+              emitStockUpdated(item.product, updatedProduct ? Math.max(0, updatedProduct.quantity) : 0);
+            } catch (sockErr) {
+              console.error('[Stripe Webhook] Stock socket emit error:', sockErr.message);
+            }
           } catch (itemErr) {
             console.error(`[Stripe Webhook Error] Failed to decrement inventory for product ${item.product}:`, itemErr.message);
           }
@@ -135,6 +149,14 @@ const handleStripeWebhook = async (req, res) => {
 
         await order.save();
         console.log(`[Stripe Webhook] Order ${order._id} marked as PAID & CONFIRMED.`);
+
+        // Emit real-time payment success & order status updated
+        try {
+          emitPaymentSuccess(order);
+          emitOrderStatusUpdated(order);
+        } catch (sockErr) {
+          console.error('[Stripe Webhook] Payment success socket emit error:', sockErr.message);
+        }
 
         // Send Payment Success Email (Idempotent & Safe against SMTP failure)
         if (!order.paymentSuccessEmailSent) {
@@ -193,6 +215,14 @@ const handleStripeWebhook = async (req, res) => {
             paymentIntent.cancellation_reason ||
             'Your card was declined or the payment session expired.';
 
+          // Emit real-time payment failed event
+          try {
+            emitPaymentFailed(order, failureReason);
+            emitOrderStatusUpdated(order);
+          } catch (sockErr) {
+            console.error('[Stripe Webhook] Payment failed socket emit error:', sockErr.message);
+          }
+
           // Send Payment Failed Email (Idempotent & Safe)
           if (!order.paymentFailedEmailSent) {
             try {
@@ -233,6 +263,13 @@ const handleStripeWebhook = async (req, res) => {
           order.paymentStatus = 'failed';
           await order.save();
           console.log(`[Stripe Webhook] Order ${order._id} marked as FAILED via async_payment_failed.`);
+
+          try {
+            emitPaymentFailed(order, 'The asynchronous payment method failed or expired.');
+            emitOrderStatusUpdated(order);
+          } catch (sockErr) {
+            console.error('[Stripe Webhook] Async payment failed socket emit error:', sockErr.message);
+          }
 
           if (!order.paymentFailedEmailSent) {
             try {
@@ -307,6 +344,16 @@ const handleStripeWebhook = async (req, res) => {
             await order.save();
             console.log(`[Stripe Webhook] Order ${order._id} marked as REFUNDED.`);
           }
+
+          // Emit real-time refund status updated event
+          try {
+            if (refundRequest || order) {
+              emitRefundStatusUpdated(refundRequest || { _id: refund.id, status: 'refunded', requestedAmount: refundedAmount }, order);
+              if (order) emitOrderStatusUpdated(order);
+            }
+          } catch (sockErr) {
+            console.error('[Stripe Webhook] Refund status socket emit error:', sockErr.message);
+          }
         } else if (refund.status === 'failed' || refund.status === 'canceled') {
           if (refundRequest && refundRequest.status !== 'failed') {
             refundRequest.status = 'failed';
@@ -317,6 +364,15 @@ const handleStripeWebhook = async (req, res) => {
           if (order && order.refundStatus !== 'failed') {
             order.refundStatus = 'failed';
             await order.save();
+          }
+
+          try {
+            if (refundRequest || order) {
+              emitRefundStatusUpdated(refundRequest || { _id: refund.id, status: 'failed', failureReason: refund.failure_reason }, order);
+              if (order) emitOrderStatusUpdated(order);
+            }
+          } catch (sockErr) {
+            console.error('[Stripe Webhook] Refund failed socket emit error:', sockErr.message);
           }
         }
         break;

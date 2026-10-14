@@ -175,6 +175,76 @@ const orderSchema = new mongoose.Schema(
       ref: 'RefundRequest',
       default: null,
     },
+    // Real-time Delivery & Rider Tracking Fields
+    assignedRider: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+      index: true,
+    },
+    assignedRiderName: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    assignedRiderPhone: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    deliveryStatus: {
+      type: String,
+      enum: ['unassigned', 'assigned', 'accepted', 'picked_up', 'on_the_way', 'delivered', 'cancelled'],
+      default: 'unassigned',
+      index: true,
+    },
+    riderLocation: {
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: 'Point',
+      },
+      coordinates: {
+        type: [Number], // [longitude, latitude] GeoJSON
+        default: undefined,
+      },
+      accuracy: {
+        type: Number,
+        default: null,
+      },
+      heading: {
+        type: Number,
+        default: null,
+      },
+      speed: {
+        type: Number,
+        default: null,
+      },
+    },
+    lastLocationUpdate: {
+      type: Date,
+      default: null,
+    },
+    assignedAt: {
+      type: Date,
+      default: null,
+    },
+    acceptedAt: {
+      type: Date,
+      default: null,
+    },
+    pickedUpAt: {
+      type: Date,
+      default: null,
+    },
+    deliveryStartedAt: {
+      type: Date,
+      default: null,
+    },
+    deliveredAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

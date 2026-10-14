@@ -1487,6 +1487,115 @@ export async function deleteAdminDeliveryZone(
   }
 }
 
+/**
+ * Retrieve all orders for Admin Panel
+ */
+export async function getAdminOrders(token?: string): Promise<{ success: boolean; orders?: any[]; message?: string }> {
+  const authToken = token || getToken();
+  if (!authToken) {
+    return { success: false, message: 'Authentication required' };
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/admin/orders`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      cache: 'no-store',
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (err: any) {
+    return { success: false, message: err.message || 'Failed to fetch orders' };
+  }
+}
+
+/**
+ * Update order status from Admin Panel
+ */
+export async function updateAdminOrderStatus(
+  orderId: string,
+  payload: { orderStatus?: string; paymentStatus?: string },
+  token?: string
+): Promise<{ success: boolean; order?: any; message?: string }> {
+  const authToken = token || getToken();
+  if (!authToken) {
+    return { success: false, message: 'Authentication required' };
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/admin/orders/${orderId}/status`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    return await response.json();
+  } catch (err: any) {
+    return { success: false, message: err.message || 'Failed to update order status' };
+  }
+}
+
+/**
+ * Retrieve all delivery riders for Admin Panel
+ */
+export async function getAdminRiders(token?: string): Promise<{ success: boolean; riders?: any[]; message?: string }> {
+  const authToken = token || getToken();
+  if (!authToken) {
+    return { success: false, message: 'Authentication required' };
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/admin/riders`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      cache: 'no-store',
+    });
+
+    return await response.json();
+  } catch (err: any) {
+    return { success: false, message: err.message || 'Failed to fetch riders' };
+  }
+}
+
+/**
+ * Assign a rider to an order
+ */
+export async function assignRiderToOrder(
+  orderId: string,
+  riderId: string,
+  token?: string
+): Promise<{ success: boolean; order?: any; message?: string }> {
+  const authToken = token || getToken();
+  if (!authToken) {
+    return { success: false, message: 'Authentication required' };
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/admin/orders/${orderId}/assign-rider`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ riderId }),
+    });
+
+    return await response.json();
+  } catch (err: any) {
+    return { success: false, message: err.message || 'Failed to assign rider' };
+  }
+}
+
 
 
 

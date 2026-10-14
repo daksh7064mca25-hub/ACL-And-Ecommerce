@@ -16,6 +16,7 @@ import {
   ProductLocation,
 } from '@/lib/api';
 import LocationPicker from '@/components/LocationPicker';
+import { useSocket } from '@/context/SocketContext';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
@@ -27,6 +28,7 @@ export default function ProductsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [admin, setAdmin] = useState<AdminUser | null>(null);
   const [products, setProducts] = useState<ProductItem[]>([]);
+  const { onStockUpdated, onProductCreated, onProductUpdated } = useSocket();
   const [searchTerm, setSearchTerm] = useState('');
   const [isAccessDenied, setIsAccessDenied] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -113,6 +115,34 @@ export default function ProductsPage() {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
+
+  // Real-time Socket.IO listeners for product catalog and inventory sync
+  useEffect(() => {
+    const unsubStock = onStockUpdated((data) => {
+      setProducts((prev) =>
+        prev.map((p) => (p._id === data.productId ? { ...p, quantity: data.stock } : p))
+      );
+    });
+
+    const unsubCreated = onProductCreated((newProd) => {
+      setProducts((prev) => {
+        if (prev.some((p) => p._id === newProd._id)) return prev;
+        return [newProd, ...prev];
+      });
+    });
+
+    const unsubUpdated = onProductUpdated((updatedProd) => {
+      setProducts((prev) =>
+        prev.map((p) => (p._id === updatedProd._id ? { ...p, ...updatedProd } : p))
+      );
+    });
+
+    return () => {
+      unsubStock();
+      unsubCreated();
+      unsubUpdated();
+    };
+  }, [onStockUpdated, onProductCreated, onProductUpdated]);
 
   // Clean up object URLs on preview change
   useEffect(() => {

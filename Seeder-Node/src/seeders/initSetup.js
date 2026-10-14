@@ -383,6 +383,48 @@ const createAdmin = async () => {
   console.log('[Admin] Admin user initialization complete.\n');
 };
 
+const createRider = async () => {
+  console.log('[Rider] Initializing default Rider user...');
+
+  const riderRole = await Role.findOne({ name: 'Rider' });
+
+  if (!riderRole) {
+    throw new Error('Rider role not found. Ensure createRoles() ran before createRider().');
+  }
+
+  const riderName = process.env.RIDER_NAME || 'Raj Kumar';
+  const riderEmail = (process.env.RIDER_EMAIL || 'rider@example.com').toLowerCase().trim();
+  const riderPassword = process.env.RIDER_PASSWORD || 'Rider@123';
+  const riderPhone = '+91 98765 43210';
+
+  const existingRider = await User.findOne({ email: riderEmail });
+
+  if (existingRider) {
+    console.log(`  - Rider user '${riderEmail}' already exists. Skipping.`);
+  } else {
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(riderPassword, saltRounds);
+
+    const newRider = await User.create({
+      name: riderName,
+      email: riderEmail,
+      phone: riderPhone,
+      password: hashedPassword,
+      role: riderRole._id,
+      isEmailVerified: true,
+    });
+
+    console.log(`  + Rider user created successfully:`);
+    console.log(`    - ID:    ${newRider._id}`);
+    console.log(`    - Name:  ${newRider.name}`);
+    console.log(`    - Email: ${newRider.email}`);
+    console.log(`    - Phone: ${newRider.phone}`);
+    console.log(`    - Role:  Rider (${riderRole._id})`);
+  }
+
+  console.log('[Rider] Rider user initialization complete.\n');
+};
+
 const seedDeliveryZones = async () => {
   console.log('[DeliveryZones] Checking and seeding delivery zones...');
 
@@ -510,6 +552,7 @@ const initSetup = async () => {
     const permissionMap = await createPermissions();
     await createRoles(permissionMap);
     await createAdmin();
+    await createRider();
     await seedProductsWithLocations();
     await seedDeliveryZones();
 

@@ -6,6 +6,7 @@ const productRoutes = require('./routes/productRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const deliveryZoneRoutes = require('./routes/deliveryZoneRoutes');
 const webhookRoutes = require('./routes/webhookRoutes');
+const riderRoutes = require('./routes/riderRoutes');
 
 const app = express();
 
@@ -54,6 +55,7 @@ app.use('/api/products', productRoutes);
 app.use('/api/delivery-zones', deliveryZoneRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/stripe', webhookRoutes);
+app.use('/api/rider', riderRoutes);
 
 // Catch-all 404 handler
 app.use((req, res) => {

@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
+import { useSocket } from '@/context/SocketContext';
 import {
   getMyOrders,
   createRefundRequest,
@@ -21,6 +22,7 @@ const REFUND_REASONS = [
 
 export default function OrdersPage() {
   const { user, token, logout, isAuthenticated, isMounted } = useAuth();
+  const { onOrderStatusUpdated, onPaymentSuccess, onRefundStatusUpdated, onDeliveryStatus } = useSocket();
   const [orders, setOrders] = useState<OrderDetail[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -55,7 +57,6 @@ export default function OrdersPage() {
         err.message?.includes('Access denied') ||
         err.message?.includes('User no longer exists')
       ) {
-        // Automatically clear expired / invalid token and prompt user to login
         logout();
       } else {
         setErrorMessage(err.message || 'Failed to retrieve order history.');
@@ -70,6 +71,74 @@ export default function OrdersPage() {
       loadOrders();
     }
   }, [token, isMounted]);
+
+  // Real-time Socket.IO event listeners for live order status, delivery, payment, and refund updates
+  useEffect(() => {
+    const unsubOrder = onOrderStatusUpdated((data) => {
+      setOrders((prev) =>
+        prev.map((o) =>
+          o._id === data.orderId
+            ? {
+                ...o,
+                orderStatus: (data.orderStatus as any) || o.orderStatus,
+                paymentStatus: (data.paymentStatus as any) || o.paymentStatus,
+                refundStatus: (data.refundStatus as any) || o.refundStatus,
+                deliveryStatus: ((data as any).deliveryStatus as any) || o.deliveryStatus,
+              }
+            : o
+        )
+      );
+    });
+
+    const unsubDelivery = onDeliveryStatus((data) => {
+      setOrders((prev) =>
+        prev.map((o) =>
+          o._id === data.orderId
+            ? {
+                ...o,
+                deliveryStatus: (data.status as any) || (data.deliveryStatus as any) || o.deliveryStatus,
+                orderStatus: (data.orderStatus as any) || (data.status === 'delivered' ? 'completed' : o.orderStatus),
+                assignedRiderName: data.riderName || o.assignedRiderName,
+              }
+            : o
+        )
+      );
+    });
+
+    const unsubPayment = onPaymentSuccess((data) => {
+      setOrders((prev) =>
+        prev.map((o) =>
+          o._id === data.orderId
+            ? {
+                ...o,
+                paymentStatus: 'paid',
+                orderStatus: (data.orderStatus as any) || 'confirmed',
+              }
+            : o
+        )
+      );
+    });
+
+    const unsubRefund = onRefundStatusUpdated((data) => {
+      setOrders((prev) =>
+        prev.map((o) =>
+          o._id === data.orderId
+            ? {
+                ...o,
+                refundStatus: (data.refundStatus as any) || (data.status as any) || o.refundStatus,
+              }
+            : o
+        )
+      );
+    });
+
+    return () => {
+      unsubOrder();
+      unsubDelivery();
+      unsubPayment();
+      unsubRefund();
+    };
+  }, [onOrderStatusUpdated, onDeliveryStatus, onPaymentSuccess, onRefundStatusUpdated]);
 
   const openRefundModal = (order: OrderDetail) => {
     setSelectedOrderForRefund(order);
@@ -106,7 +175,6 @@ export default function OrdersPage() {
 
       if (response.success) {
         setRefundSuccessMsg('Refund request submitted successfully. Our team will review your request.');
-        // Refresh orders after brief delay
         setTimeout(async () => {
           await loadOrders();
           closeRefundModal();
@@ -127,11 +195,14 @@ export default function OrdersPage() {
   if (!isAuthenticated) {
     return (
       <div className="max-w-md mx-auto py-20 text-center space-y-4">
-        <h2 className="text-2xl font-bold text-white">Sign In to View Orders</h2>
+        <div className="w-16 h-16 rounded-3xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center mx-auto text-2xl border border-indigo-500/20">
+          📦
+        </div>
+        <h2 className="text-2xl font-black text-white">Sign In to View Orders</h2>
         <p className="text-xs text-gray-400">Please sign in with your customer account to view your past orders and receipts.</p>
         <Link
           href="/login"
-          className="inline-block px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/20"
+          className="inline-block px-6 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/20"
         >
           Sign In
         </Link>
@@ -140,7 +211,7 @@ export default function OrdersPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 max-w-5xl mx-auto pb-16">
       {/* Header */}
       <div className="pb-6 border-b border-gray-800 flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -151,34 +222,34 @@ export default function OrdersPage() {
         </div>
         <button
           onClick={loadOrders}
-          className="px-3.5 py-1.5 rounded-xl bg-gray-900 hover:bg-gray-800 border border-gray-700 text-xs font-semibold text-gray-300 transition-colors"
+          className="px-4 py-2 rounded-xl bg-gray-900 hover:bg-gray-800 border border-gray-700 text-xs font-bold text-gray-300 transition-colors cursor-pointer"
         >
-          🔄 Refresh
+          🔄 Refresh Orders
         </button>
       </div>
 
       {isLoading ? (
         <div className="space-y-4 animate-pulse">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-36 bg-gray-900/60 rounded-2xl border border-gray-800" />
+            <div key={i} className="h-44 bg-gray-900/60 rounded-3xl border border-gray-800" />
           ))}
         </div>
       ) : errorMessage ? (
-        <div className="p-4 rounded-xl bg-red-950/60 border border-red-500/40 text-red-300 text-sm">
+        <div className="p-4 rounded-2xl bg-rose-950/60 border border-rose-500/40 text-rose-300 text-xs sm:text-sm">
           {errorMessage}
         </div>
       ) : orders.length === 0 ? (
-        <div className="py-20 text-center rounded-3xl bg-gray-900/40 border border-gray-800 p-8 space-y-4 max-w-md mx-auto">
-          <div className="w-16 h-16 rounded-full bg-gray-800 text-gray-500 flex items-center justify-center mx-auto">
+        <div className="py-20 text-center rounded-3xl bg-gray-900/40 border border-gray-800 p-8 space-y-4 max-w-md mx-auto shadow-2xl">
+          <div className="w-16 h-16 rounded-3xl bg-gray-800 text-gray-400 flex items-center justify-center mx-auto text-2xl">
             📦
           </div>
           <h3 className="text-lg font-bold text-white">No Orders Placed Yet</h3>
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-gray-400 leading-relaxed">
             Once you complete a purchase through Stripe, your orders will appear here.
           </p>
           <Link
             href="/products"
-            className="inline-block px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/20"
+            className="inline-block px-6 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/20"
           >
             Start Shopping
           </Link>
@@ -193,7 +264,7 @@ export default function OrdersPage() {
             return (
               <div
                 key={order._id}
-                className="bg-gray-900/70 border border-gray-800 hover:border-gray-700 rounded-2xl p-6 shadow-xl space-y-5 transition-all"
+                className="bg-gray-900/70 border border-gray-800 hover:border-gray-700 rounded-3xl p-6 shadow-xl space-y-5 transition-all"
               >
                 {/* Top Row: Meta */}
                 <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-gray-800/80 text-xs">
@@ -202,17 +273,17 @@ export default function OrdersPage() {
                       #{order._id.slice(-8).toUpperCase()}
                     </span>
                     <span className="text-gray-600">•</span>
-                    <span className="text-gray-400">{new Date(order.createdAt).toLocaleDateString()}</span>
+                    <span className="text-gray-400 font-medium">{new Date(order.createdAt).toLocaleDateString()}</span>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
                     {/* Payment Status Badge */}
                     <span
-                      className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                      className={`px-3 py-0.5 rounded-full text-[11px] font-bold border ${
                         order.paymentStatus === 'paid'
                           ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
                           : order.paymentStatus === 'failed'
-                          ? 'bg-red-500/15 text-red-400 border-red-500/30'
+                          ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
                           : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
                       }`}
                     >
@@ -220,21 +291,36 @@ export default function OrdersPage() {
                     </span>
 
                     {/* Order Status Badge */}
-                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-gray-800 text-gray-300 border border-gray-700">
+                    <span className="px-3 py-0.5 rounded-full text-[11px] font-bold bg-gray-800 text-gray-300 border border-gray-700">
                       STATUS: {order.orderStatus.toUpperCase()}
                     </span>
 
-                    {/* Refund Status Badge (if applicable) */}
+                    {/* Delivery Status Badge */}
+                    {order.deliveryStatus && (
+                      <span
+                        className={`px-3 py-0.5 rounded-full text-[11px] font-bold border ${
+                          order.deliveryStatus === 'delivered'
+                            ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                            : order.deliveryStatus === 'on_the_way'
+                            ? 'bg-orange-500/15 text-orange-400 border-orange-500/30 animate-pulse'
+                            : 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30'
+                        }`}
+                      >
+                        DELIVERY: {order.deliveryStatus.replace(/_/g, ' ').toUpperCase()}
+                      </span>
+                    )}
+
+                    {/* Refund Status Badge */}
                     {refundStatus !== 'none' && (
                       <span
-                        className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                        className={`px-3 py-0.5 rounded-full text-[11px] font-bold border ${
                           refundStatus === 'refunded'
                             ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30'
                             : refundStatus === 'requested' || refundStatus === 'processing'
                             ? 'bg-amber-500/15 text-amber-400 border-amber-500/30 animate-pulse'
                             : refundStatus === 'rejected'
                             ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
-                            : 'bg-red-500/15 text-red-400 border-red-500/30'
+                            : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
                         }`}
                       >
                         REFUND: {refundStatus.toUpperCase()}
@@ -260,8 +346,8 @@ export default function OrdersPage() {
                           )}
                         </div>
                         <div>
-                          <p className="font-semibold text-white">{item.title}</p>
-                          <p className="text-gray-500 text-[11px]">
+                          <p className="font-bold text-white">{item.title}</p>
+                          <p className="text-gray-400 text-[11px]">
                             Qty: {item.quantity} × ₹{Number(item.priceAtPurchase).toFixed(2)}
                           </p>
                         </div>
@@ -275,14 +361,14 @@ export default function OrdersPage() {
 
                 {/* Delivery Zone Details Snapshot */}
                 {(order.deliveryZoneName || order.deliveryLocation || (order.deliveryFee !== undefined && order.deliveryFee > 0)) && (
-                  <div className="p-3 rounded-xl bg-gray-950/60 border border-gray-800/80 text-xs flex flex-wrap items-center justify-between gap-2 text-gray-300">
+                  <div className="p-3.5 rounded-2xl bg-gray-950/60 border border-gray-800/80 text-xs flex flex-wrap items-center justify-between gap-2 text-gray-300">
                     <div className="flex items-center space-x-2">
                       <span className="text-emerald-400">⚡</span>
-                      <span className="font-semibold text-white">
+                      <span className="font-bold text-white">
                         {order.deliveryZoneName || 'Delivery Zone'}
                       </span>
                       {order.estimatedDeliveryTime && (
-                        <span className="text-gray-400">• ~{order.estimatedDeliveryTime}</span>
+                        <span className="text-gray-400 font-medium">• ~{order.estimatedDeliveryTime}</span>
                       )}
                     </div>
                     <div className="flex items-center space-x-3 text-[11px]">
@@ -291,18 +377,18 @@ export default function OrdersPage() {
                           📍 {order.deliveryLocation.formattedAddress}
                         </span>
                       )}
-                      <span className="px-2 py-0.5 rounded bg-gray-800 text-indigo-300 border border-gray-700 font-bold">
-                        Delivery Charge: ₹{order.deliveryFee ?? 0}
+                      <span className="px-2.5 py-0.5 rounded-lg bg-gray-800 text-indigo-300 border border-gray-700 font-bold">
+                        Delivery: ₹{order.deliveryFee ?? 0}
                       </span>
                     </div>
                   </div>
                 )}
 
-                {/* Bottom Row: Total & Refund Action */}
+                {/* Bottom Row: Total & Actions */}
                 <div className="pt-3 border-t border-gray-800/80 flex flex-wrap justify-between items-center gap-4">
                   <div className="flex items-baseline space-x-2">
-                    <span className="text-xs text-gray-400">Total Paid:</span>
-                    <span className="text-lg font-black text-indigo-300">
+                    <span className="text-xs text-gray-400 font-medium">Total Paid:</span>
+                    <span className="text-xl font-black text-indigo-300">
                       ₹{order.totalAmount.toFixed(2)}
                     </span>
                     {order.subtotalAmount !== undefined && order.deliveryFee !== undefined && (
@@ -311,36 +397,48 @@ export default function OrdersPage() {
                       </span>
                     )}
                     {order.refundedAmount && order.refundedAmount > 0 && (
-                      <span className="text-xs text-emerald-400 font-semibold ml-2">
+                      <span className="text-xs text-emerald-400 font-bold ml-2">
                         (Refunded: ₹{order.refundedAmount.toFixed(2)})
                       </span>
                     )}
                   </div>
 
-                  <div>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/orders/${order._id}/track`}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm border ${
+                        order.deliveryStatus === 'delivered'
+                          ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border-emerald-500/30 hover:border-emerald-500/50'
+                          : 'bg-orange-500/15 hover:bg-orange-500/25 text-orange-300 border-orange-500/30 hover:border-orange-500/50'
+                      }`}
+                    >
+                      <span>{order.deliveryStatus === 'delivered' ? '✓' : '🛵'}</span>
+                      <span>{order.deliveryStatus === 'delivered' ? 'Delivery Details' : 'Track Live'}</span>
+                    </Link>
+
                     {canRequestRefund ? (
                       <button
                         onClick={() => openRefundModal(order)}
-                        className="px-4 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 hover:border-rose-500/50 text-xs font-bold transition-all flex items-center space-x-1.5 shadow-sm"
+                        className="px-4 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 hover:border-rose-500/50 text-xs font-bold transition-all flex items-center space-x-1.5 shadow-sm cursor-pointer"
                       >
                         <span>↩ Request Refund</span>
                       </button>
                     ) : refundStatus === 'requested' || refundStatus === 'processing' ? (
                       <div className="text-right">
                         <span className="inline-flex items-center text-xs font-semibold text-amber-400 bg-amber-500/10 px-3 py-1.5 rounded-xl border border-amber-500/20">
-                          ⏳ Refund Request Under Review
+                          ⏳ Refund Under Review
                         </span>
                       </div>
                     ) : refundStatus === 'refunded' ? (
                       <div className="text-right">
                         <span className="inline-flex items-center text-xs font-semibold text-cyan-300 bg-cyan-500/10 px-3 py-1.5 rounded-xl border border-cyan-500/20">
-                          ✓ Payment Refunded via Stripe
+                          ✓ Payment Refunded
                         </span>
                       </div>
                     ) : refundStatus === 'rejected' ? (
                       <div className="text-right">
                         <span className="inline-flex items-center text-xs font-semibold text-rose-400 bg-rose-500/10 px-3 py-1.5 rounded-xl border border-rose-500/20">
-                          ✕ Refund Request Declined
+                          ✕ Refund Declined
                         </span>
                       </div>
                     ) : null}
@@ -359,7 +457,7 @@ export default function OrdersPage() {
             {/* Modal Header */}
             <div className="flex items-center justify-between pb-4 border-b border-gray-800">
               <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 font-bold text-lg">
+                <div className="w-10 h-10 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 font-black text-lg">
                   ↩
                 </div>
                 <div>
@@ -372,7 +470,7 @@ export default function OrdersPage() {
               <button
                 onClick={closeRefundModal}
                 disabled={isSubmittingRefund}
-                className="text-gray-400 hover:text-white p-2 rounded-xl hover:bg-gray-800 transition-colors"
+                className="text-gray-400 hover:text-white p-2 rounded-xl hover:bg-gray-800 transition-colors cursor-pointer"
               >
                 ✕
               </button>
@@ -408,7 +506,7 @@ export default function OrdersPage() {
                   value={refundReason}
                   onChange={(e) => setRefundReason(e.target.value)}
                   disabled={isSubmittingRefund}
-                  className="w-full bg-gray-950 border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-rose-500 transition-colors"
+                  className="w-full bg-gray-950 border border-gray-800 rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:border-rose-500 transition-colors cursor-pointer"
                 >
                   {REFUND_REASONS.map((r) => (
                     <option key={r} value={r}>
@@ -428,7 +526,7 @@ export default function OrdersPage() {
                   onChange={(e) => setRefundDescription(e.target.value)}
                   disabled={isSubmittingRefund}
                   placeholder="Explain why you are requesting a refund for this order..."
-                  className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-rose-500 transition-colors resize-none"
+                  className="w-full bg-gray-950 border border-gray-800 rounded-2xl p-3 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-rose-500 transition-colors resize-none"
                   maxLength={1000}
                 />
                 <p className="text-[11px] text-gray-500 text-right mt-1">
@@ -438,14 +536,14 @@ export default function OrdersPage() {
 
               {/* Error Message */}
               {refundError && (
-                <div className="p-3 rounded-xl bg-red-950/60 border border-red-500/40 text-red-300 text-xs">
+                <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-500/40 text-rose-300 text-xs font-medium">
                   {refundError}
                 </div>
               )}
 
               {/* Success Message */}
               {refundSuccessMsg && (
-                <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-xs">
+                <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-xs font-medium">
                   ✓ {refundSuccessMsg}
                 </div>
               )}
@@ -456,18 +554,18 @@ export default function OrdersPage() {
                   type="button"
                   onClick={closeRefundModal}
                   disabled={isSubmittingRefund}
-                  className="px-4 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold transition-colors"
+                  className="px-4 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-bold transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmittingRefund || !!refundSuccessMsg}
-                  className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-lg shadow-rose-600/20 flex items-center space-x-2"
+                  className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-lg shadow-rose-600/20 flex items-center space-x-2 cursor-pointer"
                 >
                   {isSubmittingRefund ? (
                     <>
-                      <span className="animate-spin inline-block">⏳</span>
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                       <span>Submitting...</span>
                     </>
                   ) : (
@@ -482,4 +580,3 @@ export default function OrdersPage() {
     </div>
   );
 }
-

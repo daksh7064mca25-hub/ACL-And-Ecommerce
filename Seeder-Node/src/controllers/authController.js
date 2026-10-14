@@ -327,10 +327,97 @@ const customerLogin = async (req, res) => {
   }
 };
 
+/**
+ * Rider Login Controller
+ * POST /api/auth/rider/login
+ * Only allows users with the 'Rider' role to authenticate.
+ */
+const riderLogin = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and password are required',
+      });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findOne({ email: normalizedEmail }).populate('role');
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password',
+      });
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password',
+      });
+    }
+
+    if (!user.role || user.role.name !== 'Rider') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access forbidden. Only delivery riders are allowed to log in.',
+      });
+    }
+
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      return res.status(500).json({
+        success: false,
+        message: 'Authentication configuration missing',
+      });
+    }
+
+    const token = jwt.sign(
+      {
+        id: user._id,
+        role: user.role.name,
+      },
+      jwtSecret,
+      {
+        expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+      }
+    );
+
+    console.log(`[Auth] Rider '${user.email}' logged in successfully.`);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Rider login successful',
+      token,
+      data: {
+        token,
+        rider: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone || '',
+          role: user.role.name,
+        },
+      },
+    });
+  } catch (error) {
+    console.error('[Rider Login Error]:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error during rider login. Please try again later.',
+    });
+  }
+};
+
 module.exports = {
   signup,
   verifyEmail,
   adminLogin,
   customerLogin,
+  riderLogin,
 };
 

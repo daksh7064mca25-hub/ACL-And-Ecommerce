@@ -154,6 +154,21 @@ const requireAdmin = (req, res, next) => {
       message: 'Access forbidden. Admin privileges required.',
     });
   }
+  next();
+};
+
+/**
+ * Rider Authorization Middleware
+ * Ensures the authenticated user possesses the 'Rider' role (or Admin).
+ * Must be used after authenticateToken.
+ */
+const requireRider = (req, res, next) => {
+  if (!req.user || !req.user.role || (req.user.role.name !== 'Rider' && req.user.role.name !== 'Admin')) {
+    return res.status(403).json({
+      success: false,
+      message: 'Access forbidden. Delivery rider privileges required.',
+    });
+  }
 
   next();
 };
@@ -163,6 +178,7 @@ module.exports = {
   optionalAuth,
   requirePermission,
   requireAdmin,
+  requireRider,
   authMiddleware: authenticateToken,
 };
 

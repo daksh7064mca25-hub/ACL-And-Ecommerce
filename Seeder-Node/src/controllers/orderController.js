@@ -4,6 +4,13 @@ const Product = require('../models/Product');
 const DeliveryZone = require('../models/DeliveryZone');
 const { getStripe } = require('../config/stripe');
 const { sendPaymentSuccessEmail } = require('../services/emailService');
+const {
+  emitOrderCreated,
+  emitOrderStatusUpdated,
+  emitPaymentSuccess,
+  emitPaymentFailed,
+  emitStockUpdated,
+} = require('../services/socketService');
 
 /**
  * Synchronizes Order state with Stripe Checkout Session details.
@@ -66,6 +73,13 @@ const syncOrderWithStripeSession = async (order, session) => {
             await Product.findByIdAndUpdate(item.product, { quantity: 0 });
           }
           console.log(`[Order Sync] Decremented stock for '${item.title}' by ${item.quantity}. New stock: ${updatedProduct?.quantity}`);
+
+          // Emit real-time stock update
+          try {
+            emitStockUpdated(item.product, updatedProduct ? Math.max(0, updatedProduct.quantity) : 0);
+          } catch (sockErr) {
+            console.error('[Order Sync] Stock socket emit error:', sockErr.message);
+          }
         } catch (itemErr) {
           console.error(`[Order Sync Error] Failed to decrement inventory:`, itemErr.message);
         }
@@ -75,6 +89,14 @@ const syncOrderWithStripeSession = async (order, session) => {
       order.orderStatus = 'confirmed';
       await order.save();
       console.log(`[Order Sync] Order ${order._id} marked as PAID & CONFIRMED.`);
+
+      // Emit real-time payment success & order status updated
+      try {
+        emitPaymentSuccess(order);
+        emitOrderStatusUpdated(order);
+      } catch (sockErr) {
+        console.error('[Order Sync] Payment success socket emit error:', sockErr.message);
+      }
     } else {
       await order.save();
     }
@@ -97,6 +119,13 @@ const syncOrderWithStripeSession = async (order, session) => {
   } else if (session.status === 'expired' && order.paymentStatus !== 'paid') {
     order.paymentStatus = 'failed';
     await order.save();
+
+    try {
+      emitPaymentFailed(order, 'Payment session expired');
+      emitOrderStatusUpdated(order);
+    } catch (sockErr) {
+      console.error('[Order Sync] Payment failed socket emit error:', sockErr.message);
+    }
   }
 
   return order;
@@ -384,6 +413,13 @@ const createCheckoutSession = async (req, res) => {
 
     console.log(`[Checkout] Created Stripe Embedded Checkout session ${session.id} for Order ${order._id} (Email: ${order.customerEmail})`);
 
+    // Emit real-time order:created event to Admin room
+    try {
+      emitOrderCreated(order);
+    } catch (sockErr) {
+      console.error('[Checkout] Socket emit order:created error:', sockErr.message);
+    }
+
     return res.status(200).json({
       success: true,
       message: 'Embedded checkout session created successfully',
@@ -572,10 +608,79 @@ const getAllOrdersAdmin = async (req, res) => {
   }
 };
 
+/**
+ * Admin: Update Order Status
+ * PUT /api/admin/orders/:id/status
+ */
+const updateOrderStatusAdmin = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { orderStatus, paymentStatus } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid order ID format',
+      });
+    }
+
+    const validOrderStatuses = ['pending', 'confirmed', 'processing', 'completed', 'cancelled'];
+    if (orderStatus && !validOrderStatuses.includes(orderStatus.toLowerCase())) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid order status. Must be one of: ${validOrderStatuses.join(', ')}`,
+      });
+    }
+
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found',
+      });
+    }
+
+    if (orderStatus) {
+      order.orderStatus = orderStatus.toLowerCase();
+    }
+
+    if (paymentStatus) {
+      const validPaymentStatuses = ['pending', 'paid', 'failed', 'refunded'];
+      if (validPaymentStatuses.includes(paymentStatus.toLowerCase())) {
+        order.paymentStatus = paymentStatus.toLowerCase();
+      }
+    }
+
+    await order.save();
+
+    console.log(`[OrderController] Admin updated Order ${order._id} status to '${order.orderStatus}' (Payment: '${order.paymentStatus}')`);
+
+    // Emit real-time order status updated event
+    try {
+      emitOrderStatusUpdated(order);
+    } catch (sockErr) {
+      console.error('[OrderController] Socket emit error on order status update:', sockErr.message);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Order status updated to '${order.orderStatus}'`,
+      order,
+    });
+  } catch (error) {
+    console.error('[OrderController - updateOrderStatusAdmin Error]:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update order status',
+    });
+  }
+};
+
 module.exports = {
   createCheckoutSession,
   getOrderById,
   getOrderBySessionId,
   getMyOrders,
   getAllOrdersAdmin,
+  updateOrderStatusAdmin,
 };

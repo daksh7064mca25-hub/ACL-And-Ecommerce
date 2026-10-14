@@ -18,7 +18,7 @@ function SuccessContent() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    // Clear the cart once user hits the verified success page
+    // Clear cart once order success page is reached
     clearCart();
 
     async function loadOrder() {
@@ -52,27 +52,25 @@ function SuccessContent() {
   }, [sessionId, orderIdParam]);
 
   return (
-    <div className="max-w-3xl mx-auto py-8 space-y-8 animate-in fade-in">
+    <div className="max-w-3xl mx-auto py-12 px-4 space-y-8 animate-in fade-in pb-16">
       {/* Success Header Banner */}
       <div className="text-center space-y-4">
-        <div className="w-20 h-20 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto shadow-xl shadow-emerald-500/10">
-          <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
-          </svg>
+        <div className="w-20 h-20 rounded-3xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto shadow-2xl shadow-emerald-500/20 text-3xl">
+          ✓
         </div>
         <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
           Payment Successful!
         </h1>
-        <p className="text-sm text-gray-400 max-w-md mx-auto">
+        <p className="text-xs sm:text-sm text-gray-400 max-w-md mx-auto leading-relaxed">
           Thank you for your purchase. We&apos;ve received your order and our fulfillment team is preparing your package.
         </p>
       </div>
 
       {/* Order Summary Receipt Box */}
       {isLoading ? (
-        <div className="p-8 rounded-3xl bg-gray-900 border border-gray-800 animate-pulse space-y-4">
+        <div className="p-8 rounded-3xl bg-gray-900 border border-gray-800 animate-pulse space-y-4 shadow-xl">
           <div className="h-6 bg-gray-800 rounded w-1/3" />
-          <div className="h-20 bg-gray-950 rounded-xl" />
+          <div className="h-24 bg-gray-950 rounded-2xl" />
           <div className="h-6 bg-gray-800 rounded w-1/2" />
         </div>
       ) : order ? (
@@ -80,22 +78,22 @@ function SuccessContent() {
           {/* Order Meta Badges */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 rounded-2xl bg-gray-950/80 border border-gray-800/80 text-xs">
             <div>
-              <span className="text-gray-500 block">Order Number</span>
-              <span className="text-white font-mono font-bold truncate block">{order._id.slice(-8).toUpperCase()}</span>
+              <span className="text-gray-500 block font-bold uppercase text-[10px]">Order Number</span>
+              <span className="text-white font-mono font-bold truncate block mt-0.5">{order._id.slice(-8).toUpperCase()}</span>
             </div>
             <div>
-              <span className="text-gray-500 block">Payment Status</span>
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 mt-0.5">
+              <span className="text-gray-500 block font-bold uppercase text-[10px]">Payment Status</span>
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 mt-0.5">
                 {order.paymentStatus === 'paid' ? 'PAID' : 'CONFIRMED'}
               </span>
             </div>
             <div>
-              <span className="text-gray-500 block">Recipient</span>
-              <span className="text-white font-semibold truncate block">{order.customerEmail}</span>
+              <span className="text-gray-500 block font-bold uppercase text-[10px]">Recipient</span>
+              <span className="text-white font-semibold truncate block mt-0.5">{order.customerEmail}</span>
             </div>
             <div>
-              <span className="text-gray-500 block">Date</span>
-              <span className="text-white font-medium block">
+              <span className="text-gray-500 block font-bold uppercase text-[10px]">Date</span>
+              <span className="text-white font-medium block mt-0.5">
                 {new Date(order.createdAt).toLocaleDateString()}
               </span>
             </div>
@@ -106,11 +104,11 @@ function SuccessContent() {
             <div className="p-4 rounded-2xl bg-emerald-950/30 border border-emerald-500/30 space-y-2 text-xs">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-emerald-300 flex items-center gap-1.5">
-                  <span>⚡ Express Zone Delivery:</span>
-                  <span className="text-white">{order.deliveryZoneName || 'Standard'}</span>
+                  <span>⚡ Express Delivery:</span>
+                  <span className="text-white font-bold">{order.deliveryZoneName || 'Express Zone'}</span>
                 </span>
                 {order.estimatedDeliveryTime && (
-                  <span className="px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-200 border border-emerald-500/30 text-[11px] font-bold">
+                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-900/60 text-emerald-200 border border-emerald-500/30 text-[11px] font-bold">
                     Est. {order.estimatedDeliveryTime}
                   </span>
                 )}
@@ -125,14 +123,14 @@ function SuccessContent() {
 
           {/* Purchased Items List */}
           <div className="space-y-3">
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+            <h3 className="text-xs font-black text-gray-400 uppercase tracking-wider">
               Purchased Items
             </h3>
             <div className="divide-y divide-gray-800/80">
               {order.items.map((item, idx) => (
                 <div key={idx} className="py-3 flex items-center justify-between text-xs">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-lg bg-gray-950 border border-gray-800 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                    <div className="w-11 h-11 rounded-xl bg-gray-950 border border-gray-800 overflow-hidden flex-shrink-0 flex items-center justify-center">
                       {item.image ? (
                         <img
                           src={getProductImageUrl(item.image)}
@@ -144,11 +142,11 @@ function SuccessContent() {
                       )}
                     </div>
                     <div>
-                      <p className="font-semibold text-white">{item.title}</p>
-                      <p className="text-gray-400">Qty: {item.quantity} × ₹{Number(item.priceAtPurchase).toFixed(2)}</p>
+                      <p className="font-bold text-white">{item.title}</p>
+                      <p className="text-gray-400 text-[11px]">Qty: {item.quantity} × ₹{Number(item.priceAtPurchase).toFixed(2)}</p>
                     </div>
                   </div>
-                  <span className="font-bold text-white">
+                  <span className="font-black text-white">
                     ₹{(Number(item.priceAtPurchase) * item.quantity).toFixed(2)}
                   </span>
                 </div>
@@ -160,39 +158,43 @@ function SuccessContent() {
           <div className="pt-4 border-t border-gray-800 space-y-2 text-xs">
             <div className="flex justify-between text-gray-400">
               <span>Subtotal</span>
-              <span className="text-white font-medium">
+              <span className="text-white font-semibold">
                 ₹{(order.subtotalAmount ?? (order.totalAmount - (order.deliveryFee ?? 0))).toFixed(2)}
               </span>
             </div>
             <div className="flex justify-between text-gray-400">
-              <span>Delivery Charge</span>
-              <span className="text-white font-medium">
+              <span>Delivery Fee</span>
+              <span className="text-white font-semibold">
                 {order.deliveryFee === 0 || !order.deliveryFee ? (
-                  <span className="text-emerald-400 font-semibold">FREE</span>
+                  <span className="text-emerald-400 font-bold">FREE</span>
                 ) : (
                   `₹${order.deliveryFee.toFixed(2)}`
                 )}
               </span>
             </div>
             <div className="flex justify-between text-base font-bold text-white pt-2 border-t border-gray-800/80">
-              <span>Total Paid via Stripe</span>
-              <span className="text-xl font-black text-indigo-300">
+              <span className="font-bold uppercase tracking-wider text-xs sm:text-sm">Total Paid via Stripe</span>
+              <span className="text-2xl font-black text-indigo-300">
                 ₹{order.totalAmount.toFixed(2)}
               </span>
             </div>
           </div>
 
-          {/* Stripe Session Note */}
-          {order.stripeCheckoutSessionId && (
-            <div className="pt-2 text-[11px] text-gray-500 font-mono">
-              Stripe Session Reference: {order.stripeCheckoutSessionId}
-            </div>
-          )}
+          {/* Live Delivery Tracking Button if available */}
+          <div className="pt-3 border-t border-gray-800/80">
+            <Link
+              href={`/orders/${order._id}/track`}
+              className="w-full py-3.5 px-4 rounded-2xl bg-orange-500/20 hover:bg-orange-500/30 text-orange-300 border border-orange-500/40 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-md shadow-orange-500/10"
+            >
+              <span>🛵</span>
+              <span>Track Live Delivery Status</span>
+            </Link>
+          </div>
         </div>
       ) : (
         <div className="p-8 rounded-3xl bg-gray-900 border border-gray-800 text-center space-y-3">
           <p className="text-sm text-gray-300">Your checkout was processed.</p>
-          <p className="text-xs text-gray-500">Order details have been logged on the server.</p>
+          <p className="text-xs text-gray-500">Order details have been securely logged.</p>
         </div>
       )}
 
@@ -200,13 +202,13 @@ function SuccessContent() {
       <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
         <Link
           href="/products"
-          className="px-6 py-3.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/20 transition-all"
+          className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs shadow-xl shadow-indigo-600/25 transition-all"
         >
           Continue Shopping
         </Link>
         <button
           onClick={() => window.print()}
-          className="px-6 py-3.5 rounded-xl bg-gray-900 hover:bg-gray-800 text-gray-200 font-semibold text-xs border border-gray-800 hover:border-gray-700 transition-colors"
+          className="px-6 py-3.5 rounded-2xl bg-gray-900 hover:bg-gray-800 text-gray-200 font-bold text-xs border border-gray-800 hover:border-gray-700 transition-colors cursor-pointer"
         >
           Print Receipt
         </button>
@@ -217,7 +219,7 @@ function SuccessContent() {
 
 export default function SuccessPage() {
   return (
-    <Suspense fallback={<div className="py-20 text-center text-gray-400">Loading receipt...</div>}>
+    <Suspense fallback={<div className="py-20 text-center text-gray-400 font-bold">Loading receipt...</div>}>
       <SuccessContent />
     </Suspense>
   );

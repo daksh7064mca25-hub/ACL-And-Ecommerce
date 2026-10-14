@@ -124,7 +124,7 @@ export interface OrderItemDetail {
 
 export interface OrderDetail {
   _id: string;
-  customer?: string | null;
+  customer?: string | { _id: string; name?: string; email?: string } | null;
   customerEmail: string;
   customerName?: string;
   items: OrderItemDetail[];
@@ -141,6 +141,23 @@ export interface OrderDetail {
   currency: string;
   paymentStatus: 'pending' | 'paid' | 'failed' | 'refunded';
   orderStatus: 'pending' | 'confirmed' | 'cancelled' | 'processing' | 'completed';
+  assignedRider?: string | { _id: string; name?: string; email?: string; phone?: string };
+  assignedRiderName?: string;
+  assignedRiderPhone?: string;
+  deliveryStatus?: 'unassigned' | 'assigned' | 'accepted' | 'picked_up' | 'on_the_way' | 'delivered' | 'cancelled';
+  riderLocation?: {
+    type?: string;
+    coordinates?: [number, number]; // [lng, lat]
+    accuracy?: number;
+    heading?: number;
+    speed?: number;
+  };
+  lastLocationUpdate?: string;
+  assignedAt?: string;
+  acceptedAt?: string;
+  pickedUpAt?: string;
+  deliveryStartedAt?: string;
+  deliveredAt?: string;
   refundStatus?: 'none' | 'requested' | 'processing' | 'partial' | 'refunded' | 'rejected' | 'failed';
   refundedAmount?: number;
   stripeRefundId?: string;

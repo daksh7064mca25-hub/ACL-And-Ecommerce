@@ -11,6 +11,8 @@ const {
   createRole,
   updateRole,
   deleteRole,
+  getRiders,
+  assignRiderToOrder,
 } = require('../controllers/adminController');
 const {
   getAllProducts,
@@ -19,7 +21,7 @@ const {
   updateProduct,
   deleteProduct,
 } = require('../controllers/productController');
-const { getAllOrdersAdmin } = require('../controllers/orderController');
+const { getAllOrdersAdmin, updateOrderStatusAdmin } = require('../controllers/orderController');
 
 // Test protected Admin route (ACL: dashboard:read)
 router.get('/test', authenticateToken, requirePermission('dashboard:read'), (req, res) => {
@@ -39,6 +41,9 @@ router.get('/test', authenticateToken, requirePermission('dashboard:read'), (req
 
 // Users Module: Get all registered Customer accounts (ACL: users:read)
 router.get('/users', authenticateToken, requirePermission('users:read'), getCustomers);
+
+// Riders Module: Get all active Riders (ACL: dashboard:read)
+router.get('/riders', authenticateToken, requirePermission('dashboard:read'), getRiders);
 
 // Promotions Module: Dispatch promotional email to selected Customers (ACL: promotions:send)
 router.post('/promotions', authenticateToken, requirePermission('promotions:send'), sendPromotion);
@@ -80,6 +85,8 @@ router.delete('/products/:id', authenticateToken, requirePermission('products:de
 
 // Orders Module API for Admin (ACL: dashboard:read or admin)
 router.get('/orders', authenticateToken, requirePermission('dashboard:read'), getAllOrdersAdmin);
+router.put('/orders/:id/status', authenticateToken, requirePermission('dashboard:read'), updateOrderStatusAdmin);
+router.put('/orders/:id/assign-rider', authenticateToken, requirePermission('dashboard:read'), assignRiderToOrder);
 
 const {
   getAllRefundRequestsAdmin,

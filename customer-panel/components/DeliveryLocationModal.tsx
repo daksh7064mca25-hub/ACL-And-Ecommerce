@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   useDeliveryLocation,
   PRESET_LOCATIONS,
@@ -26,7 +26,7 @@ export default function DeliveryLocationModal() {
   >([]);
   const [activeTab, setActiveTab] = useState<'presets' | 'search'>('presets');
 
-  // Clear search on open
+  // Clear search on modal open
   useEffect(() => {
     if (isLocationModalOpen) {
       setSearchQuery('');
@@ -94,7 +94,7 @@ export default function DeliveryLocationModal() {
   const currentZone = serviceability?.deliveryZone;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
       <div className="bg-gray-900 border border-gray-800 rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Modal Header */}
         <div className="px-6 py-5 border-b border-gray-800 flex items-center justify-between bg-gray-950/40">
@@ -116,7 +116,7 @@ export default function DeliveryLocationModal() {
               </svg>
             </div>
             <div>
-              <h2 className="text-lg font-bold text-white tracking-tight">Choose Delivery Location</h2>
+              <h2 className="text-lg font-black text-white tracking-tight">Choose Delivery Location</h2>
               <p className="text-xs text-gray-400">
                 Check delivery serviceability, fees, and delivery times for your area.
               </p>
@@ -124,7 +124,7 @@ export default function DeliveryLocationModal() {
           </div>
           <button
             onClick={closeLocationModal}
-            className="w-8 h-8 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white flex items-center justify-center transition-colors"
+            className="w-8 h-8 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -139,7 +139,7 @@ export default function DeliveryLocationModal() {
             className={`p-4 rounded-2xl border transition-all ${
               isCurrentServiceable
                 ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300'
-                : 'bg-red-950/30 border-red-500/40 text-red-300'
+                : 'bg-rose-950/30 border-rose-500/40 text-rose-300'
             }`}
           >
             <div className="flex items-start justify-between gap-3">
@@ -147,7 +147,7 @@ export default function DeliveryLocationModal() {
                 <div className="flex items-center space-x-2">
                   <span
                     className={`w-2.5 h-2.5 rounded-full ${
-                      isCurrentServiceable ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'
+                      isCurrentServiceable ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'
                     }`}
                   />
                   <span className="text-xs font-bold uppercase tracking-wider">
@@ -158,42 +158,42 @@ export default function DeliveryLocationModal() {
                       : 'Outside Delivery Zone'}
                   </span>
                 </div>
-                <p className="text-sm font-semibold text-white line-clamp-2">
+                <p className="text-sm font-bold text-white line-clamp-2">
                   {location?.address || 'No location selected'}
                 </p>
               </div>
 
               {isCurrentServiceable && currentZone && (
                 <div className="text-right flex-shrink-0">
-                  <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-600/30 border border-indigo-500/40 text-indigo-300">
+                  <span className="inline-block px-2.5 py-1 rounded-xl text-xs font-extrabold bg-indigo-600/30 border border-indigo-500/40 text-indigo-300">
                     {currentZone.code}
                   </span>
                 </div>
               )}
             </div>
 
-            {/* Zone Perks breakdown */}
+            {/* Zone breakdown */}
             {isCurrentServiceable && currentZone ? (
               <div className="mt-3 pt-3 border-t border-emerald-500/20 grid grid-cols-3 gap-2 text-center text-xs">
                 <div className="bg-gray-900/60 rounded-xl p-2 border border-emerald-500/10">
-                  <p className="text-[10px] text-gray-400">Delivery Fee</p>
+                  <p className="text-[10px] text-gray-400 font-medium">Delivery Fee</p>
                   <p className="text-xs font-bold text-white">
                     {currentZone.deliveryFee === 0 ? 'FREE' : `₹${currentZone.deliveryFee}`}
                   </p>
                 </div>
                 <div className="bg-gray-900/60 rounded-xl p-2 border border-emerald-500/10">
-                  <p className="text-[10px] text-gray-400">Est. Time</p>
+                  <p className="text-[10px] text-gray-400 font-medium">Est. Time</p>
                   <p className="text-xs font-bold text-white">{currentZone.estimatedDeliveryTime}</p>
                 </div>
                 <div className="bg-gray-900/60 rounded-xl p-2 border border-emerald-500/10">
-                  <p className="text-[10px] text-gray-400">Min. Order</p>
+                  <p className="text-[10px] text-gray-400 font-medium">Min. Order</p>
                   <p className="text-xs font-bold text-white">
                     {currentZone.minOrderAmount === 0 ? 'None' : `₹${currentZone.minOrderAmount}`}
                   </p>
                 </div>
               </div>
             ) : !isCheckingServiceability ? (
-              <p className="mt-2 text-xs text-red-300">
+              <p className="mt-2 text-xs text-rose-300 font-medium leading-relaxed">
                 ⚠️ We currently deliver only to Chandigarh, Mohali, Panchkula, and Zirakpur zones.
                 Please select a supported address.
               </p>
@@ -205,38 +205,16 @@ export default function DeliveryLocationModal() {
             type="button"
             onClick={detectCurrentLocation}
             disabled={isLoadingLocation}
-            className="w-full py-3 px-4 rounded-xl bg-gray-800/80 hover:bg-gray-800 border border-gray-700/80 hover:border-indigo-500/50 text-white font-semibold text-xs flex items-center justify-center space-x-2 transition-all group"
+            className="w-full py-3.5 px-4 rounded-2xl bg-gray-800/80 hover:bg-gray-800 border border-gray-700/80 hover:border-indigo-500/50 text-white font-bold text-xs flex items-center justify-center space-x-2 transition-all group cursor-pointer"
           >
             {isLoadingLocation ? (
               <>
-                <svg className="animate-spin w-4 h-4 text-indigo-400" fill="none" viewBox="0 0 24 24">
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                </svg>
+                <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
                 <span>Acquiring GPS Coordinates...</span>
               </>
             ) : (
               <>
-                <svg
-                  className="w-4 h-4 text-indigo-400 group-hover:scale-110 transition-transform"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
+                <span className="text-sm">🎯</span>
                 <span>Use Current Live Location (GPS)</span>
               </>
             )}
@@ -246,7 +224,7 @@ export default function DeliveryLocationModal() {
           <div className="flex border-b border-gray-800 text-xs font-bold">
             <button
               onClick={() => setActiveTab('presets')}
-              className={`pb-2.5 px-4 transition-colors border-b-2 ${
+              className={`pb-2.5 px-4 transition-colors border-b-2 cursor-pointer ${
                 activeTab === 'presets'
                   ? 'border-indigo-500 text-white'
                   : 'border-transparent text-gray-400 hover:text-gray-200'
@@ -256,7 +234,7 @@ export default function DeliveryLocationModal() {
             </button>
             <button
               onClick={() => setActiveTab('search')}
-              className={`pb-2.5 px-4 transition-colors border-b-2 ${
+              className={`pb-2.5 px-4 transition-colors border-b-2 cursor-pointer ${
                 activeTab === 'search'
                   ? 'border-indigo-500 text-white'
                   : 'border-transparent text-gray-400 hover:text-gray-200'
@@ -268,7 +246,7 @@ export default function DeliveryLocationModal() {
 
           {activeTab === 'presets' && (
             <div className="space-y-2.5">
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-gray-400 font-medium">
                 Click any zone below to simulate delivery serviceability check:
               </p>
               <div className="grid grid-cols-1 gap-2.5">
@@ -282,9 +260,9 @@ export default function DeliveryLocationModal() {
                     <button
                       key={preset.name}
                       onClick={() => handleSelectPreset(preset.location)}
-                      className={`w-full text-left p-3.5 rounded-2xl border transition-all flex items-center justify-between ${
+                      className={`w-full text-left p-3.5 rounded-2xl border transition-all flex items-center justify-between cursor-pointer ${
                         isSelected
-                          ? 'bg-indigo-950/50 border-indigo-500 text-white shadow-md'
+                          ? 'bg-indigo-950/50 border-indigo-500 text-white shadow-lg ring-1 ring-indigo-500/50'
                           : 'bg-gray-950/60 border-gray-800 hover:border-gray-700 text-gray-300 hover:text-white'
                       }`}
                     >
@@ -293,24 +271,24 @@ export default function DeliveryLocationModal() {
                           className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold mt-0.5 ${
                             preset.isServiceable
                               ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                              : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                              : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
                           }`}
                         >
                           {preset.isServiceable ? '✓' : '✗'}
                         </div>
                         <div>
                           <div className="flex items-center space-x-2">
-                            <span className="font-semibold text-xs text-white">{preset.name}</span>
-                            <span className="text-[10px] px-2 py-0.5 rounded-md bg-gray-800 text-gray-300 border border-gray-700">
+                            <span className="font-bold text-xs text-white">{preset.name}</span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-gray-800 text-gray-300 border border-gray-700">
                               {preset.tag}
                             </span>
                           </div>
-                          <p className="text-[11px] text-gray-400 mt-0.5">{preset.zoneHint}</p>
+                          <p className="text-[11px] text-gray-400 mt-0.5 font-medium">{preset.zoneHint}</p>
                         </div>
                       </div>
 
                       {isSelected && (
-                        <span className="text-xs font-bold text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded-md border border-indigo-500/20">
+                        <span className="text-xs font-extrabold text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-lg border border-indigo-500/25">
                           Selected
                         </span>
                       )}
@@ -329,24 +307,24 @@ export default function DeliveryLocationModal() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Enter street, colony, sector, or city name..."
-                  className="flex-1 px-4 py-2.5 bg-gray-950 border border-gray-800 rounded-xl text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500"
+                  className="flex-1 px-4 py-2.5 bg-gray-950 border border-gray-800 rounded-2xl text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500"
                 />
                 <button
                   type="submit"
                   disabled={isSearching || !searchQuery.trim()}
-                  className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-colors"
+                  className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold rounded-2xl transition-colors cursor-pointer"
                 >
                   {isSearching ? 'Searching...' : 'Search'}
                 </button>
               </form>
 
               {searchResults.length > 0 && (
-                <div className="divide-y divide-gray-800 rounded-xl border border-gray-800 bg-gray-950/60 overflow-hidden">
+                <div className="divide-y divide-gray-800 rounded-2xl border border-gray-800 bg-gray-950/60 overflow-hidden">
                   {searchResults.map((res, idx) => (
                     <button
                       key={idx}
                       onClick={() => handleSelectSearchResult(res)}
-                      className="w-full text-left p-3 hover:bg-gray-800/60 text-xs text-gray-300 hover:text-white transition-colors flex items-start space-x-2"
+                      className="w-full text-left p-3 hover:bg-gray-800/60 text-xs text-gray-300 hover:text-white transition-colors flex items-start space-x-2 cursor-pointer"
                     >
                       <span className="text-indigo-400 mt-0.5">📍</span>
                       <span className="line-clamp-2">{res.address}</span>
@@ -360,7 +338,7 @@ export default function DeliveryLocationModal() {
 
         {/* Modal Footer */}
         <div className="px-6 py-4 border-t border-gray-800 bg-gray-950/60 flex items-center justify-between">
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-gray-400 font-medium">
             {isCurrentServiceable
               ? `Delivery Fee: ₹${currentZone?.deliveryFee || 0} • ${
                   currentZone?.estimatedDeliveryTime || 'Fast Delivery'
@@ -369,7 +347,7 @@ export default function DeliveryLocationModal() {
           </span>
           <button
             onClick={closeLocationModal}
-            className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/20 transition-all active:scale-95"
+            className="px-6 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-xl shadow-indigo-600/25 transition-all active:scale-95 cursor-pointer"
           >
             Confirm & Continue
           </button>

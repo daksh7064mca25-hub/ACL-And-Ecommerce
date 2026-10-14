@@ -22,7 +22,6 @@ export default function CheckoutPage() {
   const { user, token } = useAuth();
   const {
     location,
-    serviceability,
     isDeliverable,
     deliveryZone,
     deliveryFee,
@@ -63,7 +62,6 @@ export default function CheckoutPage() {
         ).trim();
 
         const hasValidFormat = publishableKey.startsWith('pk_test_') || publishableKey.startsWith('pk_live_');
-        console.log('[Stripe Debug] Publishable key configured:', Boolean(publishableKey), 'Valid format:', hasValidFormat);
 
         if (publishableKey && hasValidFormat && !isCancelled) {
           setStripePromise(loadStripe(publishableKey));
@@ -124,11 +122,6 @@ export default function CheckoutPage() {
         },
       };
 
-      console.log(
-        '[Checkout Debug] Initiating checkout with delivery zone snapshot:',
-        deliveryZone?.name,
-        'Fee: ₹' + deliveryFee
-      );
       const response = await createCheckoutSession(checkoutPayload, token);
 
       if (!response.success || !response.clientSecret) {
@@ -137,7 +130,6 @@ export default function CheckoutPage() {
         );
       }
 
-      console.log('[Checkout Debug] Received client_secret: true, session_id:', Boolean(response.sessionId));
       return response.clientSecret;
     } catch (err: any) {
       console.error('[Embedded Checkout Error]:', err);
@@ -192,7 +184,7 @@ export default function CheckoutPage() {
 
     if (!stripePromise) {
       setErrorMessage(
-        'Stripe Publishable Key (pk_test_...) is not configured. Please set NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY in customer-panel/.env.local with your real key from Stripe Dashboard.'
+        'Stripe Publishable Key is loading or not configured in environment. Please check your Stripe settings.'
       );
       return;
     }
@@ -215,9 +207,9 @@ export default function CheckoutPage() {
 
   if (!isMounted) {
     return (
-      <div className="py-16 space-y-6 animate-pulse max-w-4xl mx-auto">
-        <div className="h-8 bg-gray-800 rounded w-48" />
-        <div className="h-64 bg-gray-900 rounded-2xl" />
+      <div className="py-16 space-y-6 animate-pulse max-w-5xl mx-auto">
+        <div className="h-8 bg-gray-800 rounded-xl w-48" />
+        <div className="h-64 bg-gray-900 rounded-3xl" />
       </div>
     );
   }
@@ -229,7 +221,7 @@ export default function CheckoutPage() {
         <p className="text-xs text-gray-400">Add products to your cart before proceeding to checkout.</p>
         <Link
           href="/products"
-          className="inline-block px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs"
+          className="inline-block px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/20"
         >
           Browse Products
         </Link>
@@ -238,7 +230,7 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 max-w-6xl mx-auto pb-16">
       {/* Page Header */}
       <div className="pb-6 border-b border-gray-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -247,27 +239,27 @@ export default function CheckoutPage() {
             Complete your order with location-validated delivery and secure embedded Stripe payment.
           </p>
         </div>
-        <div className="flex items-center space-x-2 text-xs text-emerald-400 bg-emerald-950/40 border border-emerald-500/20 px-3 py-1.5 rounded-xl w-fit">
+        <div className="flex items-center space-x-2 text-xs text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-3.5 py-1.5 rounded-full w-fit">
           <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
           </svg>
-          <span className="font-semibold">256-Bit SSL Encrypted Payment</span>
+          <span className="font-bold">256-Bit SSL Encrypted Payment</span>
         </div>
       </div>
 
       {errorMessage && (
-        <div className="p-4 rounded-xl bg-red-950/60 border border-red-500/40 text-red-300 text-sm flex items-start space-x-3 animate-in fade-in">
-          <svg className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="p-4 rounded-2xl bg-rose-950/60 border border-rose-500/40 text-rose-300 text-sm flex items-start space-x-3 animate-in fade-in shadow-xl">
+          <svg className="w-5 h-5 text-rose-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <div>
-            <p className="font-semibold">{errorMessage}</p>
-            <p className="text-xs text-red-400 mt-1">
+            <p className="font-bold">{errorMessage}</p>
+            <p className="text-xs text-rose-300/80 mt-1">
               Need to modify items or location? Visit your <Link href="/cart" className="underline font-bold text-white">Cart</Link> or{' '}
               <button
                 type="button"
                 onClick={openLocationModal}
-                className="underline font-bold text-white"
+                className="underline font-bold text-white cursor-pointer"
               >
                 Change Address
               </button>
@@ -279,20 +271,20 @@ export default function CheckoutPage() {
 
       {/* Main Checkout Layout Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-        {/* Left 2 Columns: Contact Info, Delivery Address Verification, Items Review, Payment */}
+        {/* Left 2 Columns */}
         <div className="lg:col-span-2 space-y-6">
           {/* Step 1: Contact Information */}
-          <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-6 space-y-4 shadow-xl">
+          <div className="bg-gray-900/60 border border-gray-800 rounded-3xl p-6 space-y-4 shadow-xl">
             <div className="flex items-center justify-between pb-3 border-b border-gray-800">
-              <h3 className="text-base font-bold text-white flex items-center space-x-2">
-                <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 text-xs flex items-center justify-center font-bold">1</span>
+              <h3 className="text-base font-bold text-white flex items-center space-x-2.5">
+                <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 text-xs flex items-center justify-center font-black">1</span>
                 <span>Contact Information</span>
               </h3>
               {showEmbeddedCheckout && (
                 <button
                   type="button"
                   onClick={() => setShowEmbeddedCheckout(false)}
-                  className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold"
+                  className="text-xs text-indigo-400 hover:text-indigo-300 font-bold cursor-pointer"
                 >
                   Edit Details
                 </button>
@@ -301,8 +293,8 @@ export default function CheckoutPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-300 mb-1.5">
-                  Email Address <span className="text-red-400">*</span>
+                <label className="block text-xs font-bold text-gray-300 mb-1.5">
+                  Email Address <span className="text-rose-400">*</span>
                 </label>
                 <input
                   type="email"
@@ -313,16 +305,16 @@ export default function CheckoutPage() {
                   }}
                   placeholder="you@example.com"
                   disabled={showEmbeddedCheckout}
-                  className="w-full px-4 py-2.5 bg-gray-950 border border-gray-800 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 transition-colors disabled:opacity-60"
+                  className="w-full px-4 py-2.5 bg-gray-950 border border-gray-800 rounded-2xl text-xs sm:text-sm text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 transition-colors disabled:opacity-60"
                   required
                 />
-                <span className="text-[11px] text-gray-500 mt-1 block">
+                <span className="text-[11px] text-gray-500 mt-1 block font-medium">
                   Stripe receipt and order confirmation will be sent here.
                 </span>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-300 mb-1.5">
+                <label className="block text-xs font-bold text-gray-300 mb-1.5">
                   Full Name (Optional)
                 </label>
                 <input
@@ -334,34 +326,34 @@ export default function CheckoutPage() {
                   }}
                   placeholder="e.g. Jane Doe"
                   disabled={showEmbeddedCheckout}
-                  className="w-full px-4 py-2.5 bg-gray-950 border border-gray-800 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 transition-colors disabled:opacity-60"
+                  className="w-full px-4 py-2.5 bg-gray-950 border border-gray-800 rounded-2xl text-xs sm:text-sm text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 transition-colors disabled:opacity-60"
                 />
               </div>
             </div>
           </div>
 
-          {/* Step 2: Delivery Location & Zone Serviceability */}
-          <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-6 space-y-4 shadow-xl">
+          {/* Step 2: Delivery Location & Serviceability */}
+          <div className="bg-gray-900/60 border border-gray-800 rounded-3xl p-6 space-y-4 shadow-xl">
             <div className="flex items-center justify-between pb-3 border-b border-gray-800">
-              <h3 className="text-base font-bold text-white flex items-center space-x-2">
-                <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 text-xs flex items-center justify-center font-bold">2</span>
+              <h3 className="text-base font-bold text-white flex items-center space-x-2.5">
+                <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 text-xs flex items-center justify-center font-black">2</span>
                 <span>Delivery Address & Serviceability</span>
               </h3>
               <button
                 type="button"
                 onClick={openLocationModal}
                 disabled={showEmbeddedCheckout}
-                className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold disabled:opacity-50"
+                className="text-xs text-indigo-400 hover:text-indigo-300 font-bold disabled:opacity-50 cursor-pointer"
               >
                 Change Address 📍
               </button>
             </div>
 
             <div
-              className={`p-4 rounded-xl border ${
+              className={`p-4 rounded-2xl border ${
                 isDeliverable
                   ? 'bg-gray-950/60 border-gray-800'
-                  : 'bg-red-950/30 border-red-500/40'
+                  : 'bg-rose-950/30 border-rose-500/40'
               }`}
             >
               <div className="flex items-start justify-between gap-3">
@@ -369,14 +361,14 @@ export default function CheckoutPage() {
                   <div className="flex items-center space-x-2">
                     <span
                       className={`w-2 h-2 rounded-full ${
-                        isDeliverable ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'
+                        isDeliverable ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'
                       }`}
                     />
                     <span className="text-xs font-bold uppercase tracking-wider text-gray-300">
                       {isDeliverable ? 'Verified Delivery Zone' : 'Delivery Service Unavailable'}
                     </span>
                   </div>
-                  <p className="text-sm font-semibold text-white">
+                  <p className="text-sm font-bold text-white">
                     {location?.address || 'No location selected'}
                   </p>
                   <p className="text-[11px] text-gray-500 font-mono">
@@ -386,7 +378,7 @@ export default function CheckoutPage() {
 
                 {isDeliverable && deliveryZone && (
                   <div className="text-right flex-shrink-0">
-                    <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-600/30 text-indigo-300 border border-indigo-500/40">
+                    <span className="inline-block px-2.5 py-1 rounded-xl text-xs font-extrabold bg-indigo-600/30 text-indigo-300 border border-indigo-500/40">
                       {deliveryZone.code}
                     </span>
                   </div>
@@ -395,23 +387,23 @@ export default function CheckoutPage() {
 
               {isDeliverable && deliveryZone ? (
                 <div className="mt-3 pt-3 border-t border-gray-800/80 grid grid-cols-3 gap-2 text-center text-xs">
-                  <div className="bg-gray-900/80 rounded-lg p-2 border border-gray-800">
-                    <span className="text-[10px] text-gray-400 block">Delivery Zone</span>
+                  <div className="bg-gray-900/80 rounded-xl p-2 border border-gray-800">
+                    <span className="text-[10px] text-gray-400 font-medium block">Delivery Zone</span>
                     <span className="font-bold text-white truncate block">{deliveryZone.name}</span>
                   </div>
-                  <div className="bg-gray-900/80 rounded-lg p-2 border border-gray-800">
-                    <span className="text-[10px] text-gray-400 block">Delivery Charge</span>
+                  <div className="bg-gray-900/80 rounded-xl p-2 border border-gray-800">
+                    <span className="text-[10px] text-gray-400 font-medium block">Delivery Fee</span>
                     <span className="font-bold text-emerald-400 block">
                       {deliveryFee === 0 ? 'FREE' : `₹${deliveryFee}`}
                     </span>
                   </div>
-                  <div className="bg-gray-900/80 rounded-lg p-2 border border-gray-800">
-                    <span className="text-[10px] text-gray-400 block">Estimated Time</span>
+                  <div className="bg-gray-900/80 rounded-xl p-2 border border-gray-800">
+                    <span className="text-[10px] text-gray-400 font-medium block">Estimated Time</span>
                     <span className="font-bold text-white block">{estimatedDeliveryTime}</span>
                   </div>
                 </div>
               ) : (
-                <p className="mt-2 text-xs text-red-300">
+                <p className="mt-2 text-xs text-rose-300 font-medium">
                   ⚠️ Your current delivery address is outside our serviceable delivery zones. Please
                   click &quot;Change Address&quot; above to select an address in Chandigarh, Mohali,
                   or Panchkula.
@@ -421,13 +413,13 @@ export default function CheckoutPage() {
           </div>
 
           {/* Step 3: Review Cart Items */}
-          <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-6 space-y-4 shadow-xl">
+          <div className="bg-gray-900/60 border border-gray-800 rounded-3xl p-6 space-y-4 shadow-xl">
             <div className="flex justify-between items-center pb-3 border-b border-gray-800">
-              <h3 className="text-base font-bold text-white flex items-center space-x-2">
-                <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 text-xs flex items-center justify-center font-bold">3</span>
+              <h3 className="text-base font-bold text-white flex items-center space-x-2.5">
+                <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 text-xs flex items-center justify-center font-black">3</span>
                 <span>Review Cart Items ({items.length})</span>
               </h3>
-              <Link href="/cart" className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold">
+              <Link href="/cart" className="text-xs text-indigo-400 hover:text-indigo-300 font-bold">
                 Edit Cart
               </Link>
             </div>
@@ -436,7 +428,7 @@ export default function CheckoutPage() {
               {items.map((item) => (
                 <div key={item.product._id} className="py-3 flex items-center justify-between text-xs">
                   <div className="flex items-center space-x-3">
-                    <div className="w-12 h-12 rounded-lg bg-gray-950 border border-gray-800 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                    <div className="w-12 h-12 rounded-xl bg-gray-950 border border-gray-800 overflow-hidden flex-shrink-0 flex items-center justify-center">
                       {item.product.images?.[0] ? (
                         <img
                           src={getProductImageUrl(item.product.images[0])}
@@ -448,11 +440,11 @@ export default function CheckoutPage() {
                       )}
                     </div>
                     <div>
-                      <p className="font-semibold text-white truncate max-w-[200px] sm:max-w-xs">{item.product.title}</p>
+                      <p className="font-bold text-white truncate max-w-[200px] sm:max-w-xs">{item.product.title}</p>
                       <p className="text-gray-400 mt-0.5">Qty: {item.quantity} × ₹{Number(item.product.price).toFixed(2)}</p>
                     </div>
                   </div>
-                  <span className="font-bold text-white">
+                  <span className="font-black text-white">
                     ₹{((Number(item.product.price) || 0) * item.quantity).toFixed(2)}
                   </span>
                 </div>
@@ -461,13 +453,13 @@ export default function CheckoutPage() {
           </div>
 
           {/* Step 4: Payment Section (Stripe Embedded Checkout) */}
-          <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-6 space-y-5 shadow-xl">
+          <div className="bg-gray-900/60 border border-gray-800 rounded-3xl p-6 space-y-5 shadow-xl">
             <div className="flex items-center justify-between pb-3 border-b border-gray-800">
-              <h3 className="text-base font-bold text-white flex items-center space-x-2">
-                <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 text-xs flex items-center justify-center font-bold">4</span>
+              <h3 className="text-base font-bold text-white flex items-center space-x-2.5">
+                <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 text-xs flex items-center justify-center font-black">4</span>
                 <span>Secure Payment</span>
               </h3>
-              <div className="flex items-center space-x-1.5 text-xs text-indigo-400 font-medium">
+              <div className="flex items-center space-x-1.5 text-xs text-indigo-400 font-bold">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
@@ -476,7 +468,7 @@ export default function CheckoutPage() {
             </div>
 
             {showEmbeddedCheckout && stripePromise ? (
-              <div className="rounded-xl overflow-hidden bg-gray-950 p-2 sm:p-4 border border-indigo-500/30 shadow-2xl transition-all">
+              <div className="rounded-2xl overflow-hidden bg-gray-950 p-2 sm:p-4 border border-indigo-500/30 shadow-2xl transition-all">
                 <EmbeddedCheckoutProvider
                   key={checkoutSessionKey}
                   stripe={stripePromise}
@@ -486,28 +478,26 @@ export default function CheckoutPage() {
                 </EmbeddedCheckoutProvider>
               </div>
             ) : (
-              <div className="p-6 rounded-xl bg-gray-950/60 border border-gray-800/80 text-center space-y-4">
-                <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 flex items-center justify-center mx-auto">
-                  <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                  </svg>
+              <div className="p-6 rounded-2xl bg-gray-950/60 border border-gray-800/80 text-center space-y-4">
+                <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 flex items-center justify-center mx-auto text-2xl">
+                  💳
                 </div>
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold text-white">
+                  <p className="text-base font-bold text-white">
                     Ready to Pay ₹{grandTotal.toFixed(2)}
                   </p>
-                  <p className="text-xs text-gray-400 max-w-sm mx-auto">
-                    Click below to load the secure Stripe payment form with verified zone delivery.
+                  <p className="text-xs text-gray-400 max-w-sm mx-auto leading-relaxed">
+                    Click below to open the secure Stripe payment form with verified zone delivery.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={handleStartPayment}
                   disabled={isInitializingPayment || !isDeliverable}
-                  className={`px-6 py-3.5 rounded-xl font-bold text-sm shadow-lg transition-all active:scale-98 ${
+                  className={`px-8 py-3.5 rounded-2xl font-bold text-xs sm:text-sm shadow-xl transition-all active:scale-98 cursor-pointer ${
                     !isDeliverable
                       ? 'bg-gray-800 text-gray-500 border border-gray-700 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white shadow-indigo-500/25 cursor-pointer'
+                      : 'bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white shadow-indigo-500/25'
                   }`}
                 >
                   {isInitializingPayment

@@ -1,54 +1,733 @@
+================================================================================
+EXPERTO STORE - COMPLETE PROJECT ARCHITECTURE & COMPREHENSIVE DOCUMENTATION
+Hyperlocal E-Commerce Platform with Real-Time Telemetry, GeoJSON Delivery Zones,
+Stripe Embedded Payments, ACL Security, and Multi-App Ecosystem
+================================================================================
 
-User → Role
+TABLE OF CONTENTS:
+1. EXECUTIVE SUMMARY & SYSTEM OVERVIEW
+2. HIGH-LEVEL ARCHITECTURE & ECOSYSTEM PORTS
+3. CORE CAPABILITIES (WHAT YOU CAN DO IN THIS PROJECT)
+4. END-TO-END WORKFLOWS & DATA FLOWS
+   - A. Customer Discovery, Ordering & Stripe Payment Flow
+   - B. Hyperlocal Geospatial Delivery Serviceability Flow
+   - C. Real-Time Telemetry & Socket.IO Communication Flow
+   - D. Rider Dispatch & Live GPS Tracking Flow
+   - E. Customer Refund Request & Admin Automated Stripe Processing Flow
+   - F. Granular Role-Based Access Control (RBAC / ACL) Flow
+   - G. Progressive Web App (PWA) Offline & Caching Flow
+5. COMPLETE FILE-BY-FILE AND DIRECTORY BREAKDOWN
+   - Part 1: Seeder-Node (Express / MongoDB Backend)
+   - Part 2: customer-panel (Next.js 16 Customer Storefront)
+   - Part 3: admin-panel (Next.js 16 Admin & Management Console)
+   - Part 4: rider-panel (Next.js Rider Delivery Partner Portal)
+6. DATABASE SCHEMAS & MONGOOSE MODELS
+7. SOCKET.IO REAL-TIME EVENT REFERENCE
+8. REST API ROUTE CATALOG
+9. STEP-BY-STEP OPERATION & USER GUIDE
 
-Now: I implemented ACL / permission-based authorization.
+================================================================================
+1. EXECUTIVE SUMMARY & SYSTEM OVERVIEW
+================================================================================
+Experto Store (Experto Visuals) is a modern, enterprise-ready, hyperlocal
+e-commerce platform built as an interconnected monorepo-style ecosystem consisting
+of four specialized applications:
 
-User → Role → Permissions
+1. Backend Engine (Seeder-Node): Centralized REST API, Socket.IO WebSocket
+   server, MongoDB geospatial storage, Stripe webhook handler, and automated
+   email dispatch engine.
+2. Customer Storefront (customer-panel): High-performance customer web app
+   featuring dynamic product cataloging, interactive Google Maps store discovery,
+   live delivery zone calculation, Stripe Embedded Checkout, order tracking with
+   live rider GPS telemetry, customer refund portal, and PWA offline capabilities.
+3. Admin Management Console (admin-panel): Full-featured management dashboard
+   with granular Permission-based Access Control (ACL), product catalog CRUD,
+   interactive polygon map drawing for delivery zones, live order dispatching,
+   and automated Stripe refunds.
+4. Rider Partner Portal (rider-panel): Dedicated mobile-first console for
+   delivery drivers to receive dispatches, accept orders, transition delivery
+   milestones, and broadcast real-time GPS coordinates to customers and admins.
 
-Created a new Permission model to store individual permissions like:
+All monetary values across the entire platform are unified in Indian Rupees (INR - ₹).
 
-dashboard:read
-users:read
-users:create
-users:update
-users:delete
-promotions:read
-promotions:send
+================================================================================
+2. HIGH-LEVEL ARCHITECTURE & ECOSYSTEM PORTS
+================================================================================
 
++-----------------------------------------------------------------------------+
+|                                ECOSYSTEM PORTS                              |
++-----------------------------------------------------------------------------+
+|  Application       | Technology Stack                   | Port / URL        |
++--------------------+------------------------------------+-------------------+
+|  Seeder-Node       | Node.js, Express, MongoDB, Socket  | http://localhost:5000
+|  admin-panel       | Next.js (App Router), React, TW    | http://localhost:3000
+|  customer-panel    | Next.js 16, React 19, Turbopack, PWA| http://localhost:3001
+|  rider-panel       | Next.js, React, Socket.IO, GPS     | http://localhost:3002
++--------------------+------------------------------------+-------------------+
 
-Updated the Role model so each role can have multiple permissions.
+Cross-Origin Resource Sharing (CORS) is enabled on port 5000 to securely permit
+credentials and requests from all three frontend panels. WebSockets are powered
+by a unified Socket.IO instance on port 5000 with JWT authentication and room-based
+order subscriptions (`order_<id>`).
 
-Updated the Seeder (initSetup) to:
+================================================================================
+3. CORE CAPABILITIES (WHAT YOU CAN DO IN THIS PROJECT)
+================================================================================
 
-Create the permissions.
+A. FOR CUSTOMERS (customer-panel):
+- Browse & Search: Filter curated high-performance hardware, peripherals, and
+  electronics with real-time stock counters and instant text search.
+- Hyperlocal Delivery Zone Check: Automatically detect or pick delivery locations
+  (Chandigarh, Mohali, Panchkula, Zirakpur) to verify serviceability, delivery fees,
+  and estimated delivery times.
+- Interactive Nearby Stores Map: View nearby warehouse locations, service
+  radius overlays, and store distance in kilometers.
+- Cart Management: Instant stock-checked cart with quantity clamping and persistence.
+- Stripe Secure Checkout: Embedded card checkout with automated order confirmation.
+- Live Real-Time Tracking: View live GPS updates of your assigned rider moving
+  towards your address on a Google Map in real time.
+- Automated Refunds: Submit refund requests directly with refund reason and note.
+- Progressive Web App: Install as a native desktop/mobile app with offline support.
 
-Assign permissions to Admin, Staff, Rider and Customer roles.
+B. FOR ADMINISTRATORS (admin-panel):
+- Role & Permission Management (ACL): Define custom roles and assign fine-grained
+  permissions (e.g., users:read, products:create, refunds:process).
+- Product Management: Add, edit, upload images, and manage inventory stock levels.
+- Polygon Delivery Zone Editor: Draw, reshape, and save custom delivery zones on
+  a live Google Map using polygon coordinates, fee settings, and time estimates.
+- Order Management & Rider Dispatch: View all incoming orders in real time, assign
+  available riders, and observe delivery progression.
+- Automated Stripe Refunds: Review customer refund requests and issue Stripe card
+  refunds in one click with automated email receipts.
+- Analytics & Reports: Track total sales, revenue in INR, order counts, and active zones.
 
-Keep the setup idempotent.
+C. FOR RIDERS (rider-panel):
+- Order Alerts: Receive instant sound/visual push notifications for new delivery assignments.
+- Status Milestones: Transition orders through Accepted -> Picked Up -> On The Way -> Delivered.
+- GPS Broadcasting: Broadcast live latitude/longitude telemetry (or toggle simulated
+  movement mode) directly to the customer's tracking map.
 
-Added a requirePermission() middleware.
+================================================================================
+4. END-TO-END WORKFLOWS & DATA FLOWS
+================================================================================
 
-It checks whether the logged-in user's role has the required permission.
-If yes → request continues.
-If no → returns 403 Forbidden.
+--------------------------------------------------------------------------------
+A. Customer Discovery, Ordering & Stripe Payment Flow
+--------------------------------------------------------------------------------
+1. Customer visits http://localhost:3001 and selects their delivery address.
+2. The address coordinates (lat, lng) are sent to `POST /api/delivery-zones/check-serviceability`.
+3. MongoDB runs a `$geoIntersects` query against the `DeliveryZone` collection.
+4. If inside an active zone (e.g., Chandigarh CHD-EXP), the server returns the fee (₹30)
+   and estimated delivery time (20-35 mins).
+5. Customer adds items to the Cart and proceeds to `/checkout`.
+6. Checkout calls `POST /api/orders/checkout`. The backend:
+   - Validates live product inventory in MongoDB.
+   - Calculates subtotal, delivery fee, and tax in INR.
+   - Creates a pending `Order` document.
+   - Generates a Stripe Checkout Session via the Stripe Node SDK.
+   - Returns the Stripe `clientSecret` and redirect URL.
+7. Customer completes payment on Stripe.
+8. Stripe sends a signed `checkout.session.completed` event to `POST /api/stripe/webhook`.
+9. The webhook controller validates the Stripe cryptographic signature using the raw body,
+   marks the order as `paymentStatus: 'paid'`, decrements product stock, emits a
+   `payment:success` Socket.IO event, and triggers an order confirmation email via Nodemailer.
 
+--------------------------------------------------------------------------------
+B. Hyperlocal Geospatial Delivery Serviceability Flow
+--------------------------------------------------------------------------------
+1. Delivery zones are stored as GeoJSON `Polygon` objects with 2dsphere indexes:
+   `coordinates: [[[lng1, lat1], [lng2, lat2], [lng3, lat3], [lng1, lat1]]]`
+2. When customer inputs an address (via browser Geolocation or OpenStreetMap search):
+   - Backend performs: `location: { $geoIntersects: { $geometry: { type: "Point", coordinates: [lng, lat] } } }`
+3. If an intersecting zone has `isActive: true`, serviceability is granted.
+4. If outside, the UI marks the order as "Outside Delivery Zone" and prevents checkout
+   for items requiring hyperlocal courier dispatch.
 
-Protected admin APIs using specific permissions:
+--------------------------------------------------------------------------------
+C. Real-Time Telemetry & Socket.IO Communication Flow
+--------------------------------------------------------------------------------
+1. Socket server runs on port 5000 (`/socket.io`).
+2. Clients authenticate via JWT handshake (`auth: { token }`).
+3. Socket service maintains room namespaces:
+   - `order_<orderId>`: Customer, Admin, and Rider join this room for private telemetry.
+   - Global broadcasts: `product:stockUpdated` (updates catalog counters in real time).
+4. Any state mutation in the database immediately triggers a Socket broadcast:
+   - Stock update -> `io.emit('product:stockUpdated', { productId, stock })`
+   - Order status -> `io.to('order_' + id).emit('order:statusUpdated', order)`
+   - Payment confirmed -> `io.to('order_' + id).emit('payment:success', data)`
+   - Rider coordinates -> `io.to('order_' + id).emit('delivery:location', coords)`
 
-Users API → users:read
-Promotions API → promotions:send
-Dashboard → dashboard:read
-Added an API to get the logged-in admin's permissions:
+--------------------------------------------------------------------------------
+D. Rider Dispatch & Live GPS Tracking Flow
+--------------------------------------------------------------------------------
+1. Admin opens `/orders` in `admin-panel` and clicks "Assign Rider" on a paid order.
+2. Backend updates `deliveryStatus: 'assigned'` and emits `delivery:assigned` via Socket.
+3. Rider receives the order alert in `rider-panel` (http://localhost:3002).
+4. Rider accepts the delivery and marks "Picked Up".
+5. When Rider clicks "Start Delivery" (`on_the_way`):
+   - The rider's browser starts streaming GPS coordinates (`navigator.geolocation.watchPosition`
+     or simulated path) to `socket.emit('rider:location', { orderId, latitude, longitude })`.
+6. Customer watching `/orders/[id]/track` in `customer-panel` receives `delivery:location`
+   and the Google Map smoothly animates the rider's scooter icon along the route.
+7. Rider marks "Delivered": order status updates to `delivered`, customer receives completion
+   alert, and delivery timestamp is recorded.
 
-GET /api/admin/me/permissions
+--------------------------------------------------------------------------------
+E. Customer Refund Request & Admin Automated Stripe Processing Flow
+--------------------------------------------------------------------------------
+1. Customer visits `/orders` on `customer-panel` and clicks "Request Refund" on any delivered order.
+2. Customer selects a reason (e.g., defective, wrong item, late) and inputs notes.
+3. Frontend sends `POST /api/orders/my-refund-requests`.
+4. Backend creates a `RefundRequest` document linked to the Order, sets `refundStatus: 'requested'`,
+   and notifies administrators via email and Socket.IO.
+5. Admin opens `/refunds` in `admin-panel`.
+6. Admin clicks "Approve & Refund via Stripe":
+   - Backend calls Stripe API: `stripe.refunds.create({ payment_intent: order.stripePaymentIntentId, amount })`.
+   - On Stripe success, Order is updated to `refundStatus: 'refunded'`.
+   - RefundRequest is updated to `status: 'refunded'`.
+   - An email receipt with the Stripe Refund ID is sent to the customer.
+   - A live Socket alert updates the customer's screen instantly.
 
-Updated the frontend to use permissions:
+--------------------------------------------------------------------------------
+F. Granular Role-Based Access Control (RBAC / ACL) Flow
+--------------------------------------------------------------------------------
+1. Roles (Admin, Staff, Rider, Customer) have arrays of `Permission` references.
+2. Permissions follow `resource:action` convention (e.g., `products:create`, `refunds:read`).
+3. On login, JWT token is signed with the user ID, email, and role.
+4. Backend middleware `authMiddleware.js`:
+   - `protect`: Decodes JWT, verifies signature, and attaches `req.user`.
+   - `requirePermission('products:create')`: Fetches user's role and verifies whether the
+     role possesses the required permission. If not, returns `403 Forbidden`.
+5. Frontend panels check permissions to conditionally render navigation links and action buttons.
 
-Sidebar only shows modules the user has permission to access.
+--------------------------------------------------------------------------------
+G. Progressive Web App (PWA) Offline & Caching Flow
+--------------------------------------------------------------------------------
+1. `customer-panel` provides a fully compliant Progressive Web App.
+2. Web App Manifest (`app/manifest.ts`) defines icons, dark theme color (`#4f46e5`),
+   display mode (`standalone`), and app metadata.
+3. Service Worker (`public/sw.js` v2):
+   - Precaches offline fallback page (`/offline`) and branding icons.
+   - Bypasses localhost development, Next.js internal chunks, Socket.IO, and Stripe APIs.
+   - Provides Network-First navigation with instant offline fallback screen when network drops.
+4. `PWAContext.tsx` handles `beforeinstallprompt`, provides custom "Install App" banners,
+   and purges legacy caches automatically.
 
-Users page checks users:read.
+================================================================================
+5. COMPLETE FILE-BY-FILE AND DIRECTORY BREAKDOWN
+================================================================================
 
-Promotions page checks promotions:send.
+--------------------------------------------------------------------------------
+PART 1: Seeder-Node (Express / MongoDB Backend)
+--------------------------------------------------------------------------------
+Location: c:\Users\Asus\OneDrive\Desktop\Projects\Seeder-Node
 
-Important: Frontend permission checks are only for UI.
-The backend middleware is the actual security layer.
+- `server.js`:
+  Entry point of the backend application. Initializes the HTTP server, connects
+  to MongoDB database, binds Socket.IO, and listens on port 5000.
+
+- `src/app.js`:
+  Express application setup. Configures CORS headers, JSON body parsing with rawBody
+  preservation for Stripe signature verification, static file serving for `/uploads`,
+  healthcheck endpoint (`/api/health`), route mounts, and 404 handler.
+
+- `src/config/db.js`:
+  Mongoose connection manager. Connects to MongoDB URI from `.env` and sets up
+  connection event listeners.
+
+- `src/models/User.js`:
+  Mongoose schema for user accounts. Stores name, email, hashed password (bcrypt),
+  phone, role reference (`Role`), active status, and timestamps.
+
+- `src/models/Role.js`:
+  Schema defining roles (Admin, Staff, Rider, Customer) and an array of ObjectIds
+  referencing the `Permission` collection.
+
+- `src/models/Permission.js`:
+  Schema for individual granular access permissions. Contains permission name, code
+  (e.g., `dashboard:read`, `users:create`, `products:delete`), and description.
+
+- `src/models/Product.js`:
+  Schema for store products. Stores title, description, price (INR), category,
+  quantity (stock), images (array of upload filenames), isDeliverable flag, and timestamps.
+
+- `src/models/Order.js`:
+  Comprehensive schema for orders. Stores customer reference, items array (productId,
+  title, price, quantity), shippingAddress (address, city, state, lat, lng),
+  deliveryZone reference, deliveryFee, tax, totalAmount, orderStatus (`pending`,
+  `confirmed`, `processing`, `delivered`, `cancelled`), paymentStatus (`pending`,
+  `paid`, `failed`, `refunded`), deliveryStatus (`unassigned`, `assigned`, `accepted`,
+  `picked_up`, `on_the_way`, `delivered`), assignedRider reference, and Stripe session/PI IDs.
+
+- `src/models/RefundRequest.js`:
+  Schema for customer refund requests. Stores order reference, customer reference,
+  amount, reason, customerNote, adminNote, status (`requested`, `approved`, `rejected`,
+  `refunded`), stripeRefundId, and timestamps.
+
+- `src/models/DeliveryZone.js`:
+  GeoJSON Polygon schema for geospatial delivery zones. Stores zone name, code
+  (e.g., `CHD-EXP`), deliveryFee, estimatedDeliveryTime, minOrderAmount, isActive flag,
+  and GeoJSON geometry (`type: 'Polygon'`, `coordinates: [[[lng, lat], ...]]`)
+  with a MongoDB `2dsphere` index.
+
+- `src/controllers/authController.js`:
+  Handles customer and admin authentication. Contains `login`, `register`, `getMe`,
+  and password hashing logic with JWT token issuance.
+
+- `src/controllers/adminController.js`:
+  Handles admin dashboard metrics, user listing, role assignment, customer management,
+  and permission introspection (`getMyPermissions`).
+
+- `src/controllers/productController.js`:
+  Product catalog management. Handles public product listing with pagination/search,
+  admin product creation with Multer image upload, stock adjustments, and product deletion.
+
+- `src/controllers/orderController.js`:
+  Core order processing. Handles checkout initialization, Stripe session creation,
+  order lookup, customer order history, rider assignment, and order status transitions.
+
+- `src/controllers/deliveryZoneController.js`:
+  Geospatial zone engine. Handles zone CRUD, polygon boundary updates, and the
+  critical `checkServiceability` endpoint that tests whether coordinates fall inside a zone.
+
+- `src/controllers/refundController.js`:
+  Customer refund submission (`createRefundRequest`), admin refund listing, admin
+  rejection, and admin approval with direct Stripe API refund execution.
+
+- `src/controllers/riderController.js`:
+  Rider portal API. Returns assigned deliveries for the authenticated rider and
+  processes delivery milestone updates (`accepted`, `picked_up`, `on_the_way`, `delivered`).
+
+- `src/controllers/webhookController.js`:
+  Stripe webhook listener. Verifies `stripe-signature` against `STRIPE_WEBHOOK_SECRET`
+  using `req.rawBody`. Processes `checkout.session.completed` and `charge.refunded`
+  with database synchronization, inventory deduction, email receipts, and Socket events.
+
+- `src/routes/authRoutes.js`:
+  Express router mounting `/api/auth` endpoints (login, register, me).
+
+- `src/routes/adminRoutes.js`:
+  Mounts `/api/admin` endpoints protected by `protect` and `requirePermission`.
+
+- `src/routes/productRoutes.js`:
+  Mounts public product endpoints (`GET /api/products`) and admin product management.
+
+- `src/routes/orderRoutes.js`:
+  Mounts checkout (`POST /api/orders/checkout`), order tracking, and refund request routes.
+
+- `src/routes/deliveryZoneRoutes.js`:
+  Mounts public serviceability check and admin zone configuration routes.
+
+- `src/routes/riderRoutes.js`:
+  Mounts rider order listing and status transition routes.
+
+- `src/routes/webhookRoutes.js`:
+  Mounts Stripe webhook listener on `POST /api/stripe/webhook`.
+
+- `src/middleware/authMiddleware.js`:
+  Implements `protect` (JWT validation) and `requirePermission(code)` (ACL role check).
+
+- `src/services/emailService.js`:
+  Nodemailer email engine. Sends beautiful HTML email templates for order confirmation,
+  payment receipts, refund approvals, and delivery status updates.
+
+- `src/services/socketService.js`:
+  Socket.IO broadcast service. Exports helper functions to broadcast events to rooms
+  (`broadcastOrderStatus`, `broadcastRiderLocation`, `broadcastStockUpdate`, etc.).
+
+- `src/socket/index.js`, `src/socket/auth.js`, `src/socket/handlers.js`:
+  Socket server initialization, JWT handshake authentication, connection tracking,
+  and event listeners (`join:order`, `leave:order`, `rider:location`).
+
+- `src/seeders/initSetup.js`:
+  Idempotent master database seeder. Creates default roles, 20+ permissions,
+  admin user (`admin@experto.com`), rider user, sample products with images,
+  and predefined GeoJSON delivery zones for Chandigarh, Mohali, Panchkula, and Zirakpur.
+
+--------------------------------------------------------------------------------
+PART 2: customer-panel (Next.js 16 Customer Storefront)
+--------------------------------------------------------------------------------
+Location: c:\Users\Asus\OneDrive\Desktop\Projects\customer-panel
+
+- `app/layout.tsx`:
+  Root layout of the customer store. Wraps the whole app in `PWAProvider`,
+  `AuthProvider`, `SocketProvider`, `DeliveryLocationProvider`, `CartProvider`,
+  `AppShell`, `Footer`, `DeliveryLocationModal`, `PWAInstallPrompt`, and `PWAUpdateToast`.
+
+- `app/page.tsx`:
+  The home landing page. Features the next-gen hero section, live hyperlocal delivery
+  serviceability banner, value proposition badges, and featured products showcase.
+
+- `app/products/page.tsx`:
+  Full product catalog with live search, category pills, price display in INR (₹),
+  and quick "Add to Cart" functionality.
+
+- `app/products/[id]/page.tsx`:
+  Product detail page with multi-image gallery, stock level warning, specifications,
+  and delivery check.
+
+- `app/nearby/page.tsx`:
+  Nearby Store Discovery page. Features interactive Google Map with store pins,
+  delivery zone radius overlays, address lookup, and distance calculation.
+
+- `app/cart/page.tsx`:
+  Shopping cart view with item quantity modifiers, stock check validation, subtotal,
+  delivery fee preview, tax calculation, and checkout trigger.
+
+- `app/checkout/page.tsx`:
+  Stripe Embedded Checkout integration. Validates delivery address against serviceability
+  zones, calls backend to create order, and embeds Stripe checkout iframe.
+
+- `app/orders/page.tsx`:
+  Customer order history. Displays order cards, status badges, order items, live tracking
+  links, and "Request Refund" modal trigger.
+
+- `app/orders/[id]/track/page.tsx`:
+  Dedicated live delivery tracking page. Renders Google Map with real-time animated
+  rider scooter position, delivery milestone stepper, rider contact info, and status updates.
+
+- `app/login/page.tsx` & `app/signup/page.tsx`:
+  Customer authentication forms with JWT token persistence and validation.
+
+- `app/success/page.tsx`:
+  Stripe checkout return page. Confirms order payment via session retrieval and displays
+  order reference.
+
+- `app/cancel/page.tsx`:
+  Stripe cancelled payment handling page.
+
+- `app/offline/page.tsx`:
+  PWA offline fallback page shown when device loses internet connectivity.
+
+- `app/manifest.ts`:
+  Web App Manifest generator for PWA installation (name, icons, theme color, display mode).
+
+- `public/sw.js`:
+  Production Progressive Web App Service Worker (v2). Manages offline fallback,
+  assets precaching, cache version lifecycle, and bypasses development compiler chunks.
+
+- `components/navigation/AppShell.tsx`:
+  Main application layout shell. Coordinates sticky Header, Sidebar, and MobileDrawer.
+
+- `components/navigation/Header.tsx`:
+  Top navbar with ExpertoStore logo, search bar, PWA install trigger, cart badge, and UserMenu.
+
+- `components/navigation/Sidebar.tsx`:
+  Desktop sticky navigation drawer with Main Menu, active Delivery Zone indicator,
+  System Status widget, and customer account profile.
+
+- `components/navigation/MobileDrawer.tsx`:
+  Responsive slide-out mobile drawer with full navigation, search, and zone picker.
+
+- `components/navigation/SearchBar.tsx`:
+  Live search input component redirecting to `/products?search=...`.
+
+- `components/navigation/UserMenu.tsx`:
+  Customer dropdown menu showing user initial, order links, and sign-out button.
+
+- `components/navigation/ConnectionStatus.tsx`:
+  Real-time indicator showing WebSocket connection and PWA online/offline status.
+
+- `components/ProductCard.tsx`:
+  Product grid card with image, stock badge, deliverability indicator, and instant cart feedback.
+
+- `components/ProductGallery.tsx`:
+  Image previewer with thumbnails for product detail pages.
+
+- `components/CartItem.tsx` & `components/CartSummary.tsx`:
+  Cart item row with quantity buttons and order breakdown summary card.
+
+- `components/DeliveryLocationModal.tsx`:
+  Interactive modal allowing customers to select popular preset delivery zones,
+  detect live GPS coordinates, or search addresses via OpenStreetMap.
+
+- `components/DeliveryLocationCard.tsx`:
+  Compact delivery zone status card displayed across product and checkout pages.
+
+- `components/LiveTrackingMap.tsx`:
+  Google Maps integration rendering customer destination marker, delivery route,
+  and animated rider location marker.
+
+- `components/NearbyMap.tsx`:
+  Google Maps component displaying store coordinates and zone boundaries.
+
+- `components/PWAInstallPrompt.tsx` & `components/PWAUpdateToast.tsx`:
+  Floating UI components prompting native PWA installation and new version reload.
+
+- `components/Footer.tsx`:
+  Storefront footer with quick links, payment badges (Stripe, SSL), and copyright.
+
+- `context/AuthContext.tsx`:
+  React Context managing customer login state, JWT token, and profile storage.
+
+- `context/CartContext.tsx`:
+  React Context managing shopping cart items, quantities, subtotal, tax, and localStorage.
+
+- `context/DeliveryLocationContext.tsx`:
+  React Context managing customer coordinates, zone check API queries, and modal state.
+
+- `context/SocketContext.tsx`:
+  React Context managing WebSocket connection, event listeners, and floating toast notifications.
+
+- `context/PWAContext.tsx`:
+  React Context managing service worker registration, online/offline detection, and PWA prompts.
+
+- `lib/api.ts`:
+  Axios / Fetch API client for backend communication (products, orders, zones, refunds).
+
+- `lib/auth.ts`:
+  Token storage and authorization header helpers.
+
+- `lib/socket.ts`:
+  Socket.IO client singleton initialization and event listener helpers.
+
+- `lib/googleMaps.ts`:
+  Google Maps JS API loader and custom map styling utilities.
+
+--------------------------------------------------------------------------------
+PART 3: admin-panel (Next.js 16 Admin & Management Console)
+--------------------------------------------------------------------------------
+Location: c:\Users\Asus\OneDrive\Desktop\Projects\admin-panel
+
+- `app/layout.tsx`:
+  Admin panel root layout configuring dark/slate administrative styling.
+
+- `app/page.tsx`:
+  Root redirector sending authenticated admins to `/dashboard` or unauthenticated to `/login`.
+
+- `app/login/page.tsx`:
+  Admin login page with JWT token acquisition and permission loading.
+
+- `app/dashboard/page.tsx`:
+  Main metrics dashboard displaying total revenue, active orders, customer count,
+  and system health widgets.
+
+- `app/users/page.tsx`:
+  Staff and customer account management with role assignment and status toggling.
+
+- `app/roles/page.tsx`:
+  Role & ACL Permission editor allowing admins to configure granular permission sets.
+
+- `app/products/page.tsx`:
+  Product catalog management table with modal for adding/editing products, uploading
+  images, and setting stock.
+
+- `app/orders/page.tsx`:
+  Live order dispatch dashboard with real-time status updates and rider assignment dropdown.
+
+- `app/delivery-zones/page.tsx`:
+  Delivery zone management console integrating Google Maps polygon editor.
+
+- `app/refunds/page.tsx`:
+  Customer refund review desk. View customer reason and trigger automatic Stripe card refund.
+
+- `app/promotions/page.tsx`:
+  Promotional campaign and newsletter broadcasting desk.
+
+- `components/Sidebar.tsx`:
+  Administrative sidebar that inspects user permissions (`hasPermission`) and hides
+  modules the logged-in administrator is not authorized to access.
+
+- `components/Header.tsx`:
+  Admin header with breadcrumbs, system alerts, and admin profile dropdown.
+
+- `components/DeliveryZoneMapEditor.tsx`:
+  Google Maps Drawing Manager integration allowing admins to draw polygon zones
+  directly on the map, edit vertices, and save GeoJSON coordinates.
+
+- `components/LocationPicker.tsx`:
+  Map picker modal for pinpointing specific store or warehouse locations.
+
+- `components/DashboardCard.tsx`:
+  Metric summary widget with trend indicators.
+
+--------------------------------------------------------------------------------
+PART 4: rider-panel (Next.js Rider Delivery Partner Portal)
+--------------------------------------------------------------------------------
+Location: c:\Users\Asus\OneDrive\Desktop\Projects\rider-panel
+
+- `app/layout.tsx`:
+  Rider portal layout with dark theme optimized for mobile delivery screens.
+
+- `app/page.tsx`:
+  Rider dashboard displaying assigned deliveries, active delivery action banner,
+  customer delivery address, order items, and status progression buttons.
+
+- `app/login/page.tsx`:
+  Rider authentication page.
+
+- `context/AuthContext.tsx`:
+  Rider login state and token management.
+
+- `context/SocketContext.tsx`:
+  Rider WebSocket connection for receiving dispatches and broadcasting GPS telemetry.
+
+- `hooks/useRiderLocation.ts`:
+  GPS telemetry hook that reads device coordinates or generates smooth simulated
+  route movement, broadcasting to backend via `socket.emit('rider:location')`.
+
+- `lib/api.ts`:
+  API client for rider endpoints (`/api/rider/deliveries`, `/api/rider/deliveries/:id/status`).
+
+================================================================================
+6. DATABASE SCHEMAS & MONGOOSE MODELS
+================================================================================
+
+1. User
+   - name: String
+   - email: String (unique)
+   - password: String (bcrypt hash)
+   - phone: String
+   - role: ObjectId -> Role
+   - isActive: Boolean
+   - timestamps: true
+
+2. Role
+   - name: String (unique: Admin, Staff, Rider, Customer)
+   - permissions: [ObjectId -> Permission]
+   - description: String
+
+3. Permission
+   - name: String
+   - code: String (unique: e.g. dashboard:read, products:create, refunds:process)
+   - description: String
+
+4. Product
+   - title: String
+   - description: String
+   - price: Number (INR)
+   - category: String
+   - quantity: Number (inventory count)
+   - images: [String] (upload paths)
+   - isDeliverable: Boolean
+   - timestamps: true
+
+5. DeliveryZone
+   - name: String
+   - code: String (unique: e.g. CHD-EXP, MOH-URB, PKL-EXP, GTR-TRI)
+   - deliveryFee: Number (INR)
+   - estimatedDeliveryTime: String (e.g. "20-35 mins")
+   - minOrderAmount: Number (INR)
+   - isActive: Boolean
+   - location: {
+       type: "Polygon",
+       coordinates: [[[Number, Number]]]  // GeoJSON [lng, lat]
+     } (2dsphere index)
+
+6. Order
+   - customer: ObjectId -> User
+   - items: [{ product: ObjectId, title: String, price: Number, quantity: Number }]
+   - shippingAddress: { address: String, city: String, state: String, lat: Number, lng: Number }
+   - deliveryZone: ObjectId -> DeliveryZone
+   - deliveryFee: Number
+   - tax: Number
+   - totalAmount: Number
+   - orderStatus: String ('pending', 'confirmed', 'processing', 'delivered', 'cancelled')
+   - paymentStatus: String ('pending', 'paid', 'failed', 'refunded')
+   - deliveryStatus: String ('unassigned', 'assigned', 'accepted', 'picked_up', 'on_the_way', 'delivered')
+   - assignedRider: ObjectId -> User
+   - stripeSessionId: String
+   - stripePaymentIntentId: String
+
+7. RefundRequest
+   - order: ObjectId -> Order
+   - customer: ObjectId -> User
+   - amount: Number
+   - reason: String
+   - customerNote: String
+   - adminNote: String
+   - status: String ('requested', 'approved', 'rejected', 'refunded')
+   - stripeRefundId: String
+
+================================================================================
+7. SOCKET.IO REAL-TIME EVENT REFERENCE
+================================================================================
+
+A. Client to Server:
+- `join:order` (data: { orderId }): Joins private order room `order_<orderId>`.
+- `leave:order` (data: { orderId }): Leaves order room.
+- `rider:location` (data: { orderId, latitude, longitude, heading, speed }):
+  Broadcasts rider GPS telemetry.
+
+B. Server to Client:
+- `order:statusUpdated` (payload: { orderId, orderStatus, paymentStatus, deliveryStatus })
+- `delivery:assigned` (payload: { orderId, riderId, riderName, deliveryStatus })
+- `delivery:status` (payload: { orderId, status, riderId, riderName })
+- `delivery:location` (payload: { orderId, latitude, longitude, timestamp })
+- `payment:success` (payload: { orderId, paymentStatus, totalAmount })
+- `payment:failed` (payload: { orderId, failureReason })
+- `refund:statusUpdated` (payload: { refundRequestId, orderId, status, approvedAmount })
+- `product:stockUpdated` (payload: { productId, stock })
+- `notification:new` (payload: { title, message, type })
+
+================================================================================
+8. REST API ROUTE CATALOG
+================================================================================
+
+Authentication:
+- POST /api/auth/register : Register customer account
+- POST /api/auth/login : Authenticate and receive JWT
+- GET  /api/auth/me : Get authenticated user profile
+
+Products:
+- GET  /api/products : Search and browse public products
+- GET  /api/products/:id : Product details
+- POST /api/products : Create product (admin: products:create)
+- PUT  /api/products/:id : Update product (admin: products:update)
+- DELETE /api/products/:id : Delete product (admin: products:delete)
+
+Delivery Zones:
+- GET  /api/delivery-zones : List all zones
+- POST /api/delivery-zones/check-serviceability : Check lat/lng against polygon zones
+- POST /api/delivery-zones : Create polygon zone (admin: delivery_zones:create)
+- PUT  /api/delivery-zones/:id : Update polygon zone (admin: delivery_zones:update)
+- DELETE /api/delivery-zones/:id : Delete polygon zone (admin: delivery_zones:delete)
+
+Orders & Checkout:
+- POST /api/orders/checkout : Create order and Stripe session
+- GET  /api/orders/my-orders : Authenticated customer order history
+- GET  /api/orders/:id/track : Public/customer live tracking snapshot
+- POST /api/orders/my-refund-requests : Customer submit refund request
+
+Admin Management:
+- GET  /api/admin/dashboard/metrics : Summary metrics and sales revenue
+- GET  /api/admin/users : List staff and customers
+- GET  /api/admin/roles : List roles and permissions
+- GET  /api/admin/me/permissions : Introspect authenticated admin's permissions
+- GET  /api/admin/orders : List all orders for dispatch
+- PUT  /api/admin/orders/:id/assign-rider : Assign delivery partner
+- GET  /api/admin/refunds : List all customer refund requests
+- POST /api/admin/refunds/:id/process : Execute Stripe card refund and sync status
+
+Rider Portal:
+- GET  /api/rider/deliveries : List assigned orders for rider
+- PUT  /api/rider/deliveries/:id/status : Update delivery milestone
+
+Stripe Webhook:
+- POST /api/stripe/webhook : Receive and verify Stripe events with rawBody
+
+================================================================================
+9. STEP-BY-STEP OPERATION & USER GUIDE
+================================================================================
+
+1. Running the Platform:
+   - Backend Server: cd Seeder-Node && npm run dev (Port 5000)
+   - Admin Panel:    cd admin-panel && npm run dev (Port 3000)
+   - Customer Panel: cd customer-panel && npm run dev (Port 3001)
+   - Rider Panel:    cd rider-panel && npm run dev (Port 3002)
+
+2. Testing the Full Lifecycle:
+   Step 1: Open Customer Panel (http://localhost:3001). Choose delivery location
+           (e.g., Sector 17, Chandigarh). Add a product to cart and checkout.
+   Step 2: Complete the Stripe payment. You will see payment success and order confirmed.
+   Step 3: Open Admin Panel (http://localhost:3000, Login: admin@experto.com).
+           Navigate to "Orders & Tracking", find the paid order, and click "Assign Rider".
+   Step 4: Open Rider Panel (http://localhost:3002, Login: rider@experto.com).
+           Accept the order and click "Start Delivery". The rider starts broadcasting GPS.
+   Step 5: Switch back to Customer Panel -> "My Orders" -> "Track Delivery".
+           Watch the rider icon move live on the Google Map in real time!
+   Step 6: In Rider Panel, click "Mark Delivered". Order completes.
+   Step 7: In Customer Panel, click "Request Refund" on the order. Enter reason.
+   Step 8: In Admin Panel -> "Refund Requests", review and click "Approve & Refund via Stripe".
+           Stripe processes the refund, and confirmation emails are sent automatically!
+================================================================================

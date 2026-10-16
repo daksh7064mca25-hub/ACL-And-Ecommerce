@@ -16,6 +16,7 @@ const {
   emitOrderStatusUpdated,
   emitRefundStatusUpdated,
 } = require('../services/socketService');
+const { sendOrderNotification } = require('../services/n8nService');
 
 /**
  * Stripe Webhook Handler
@@ -88,6 +89,23 @@ const handleStripeWebhook = async (req, res) => {
               }
             } catch (mailErr) {
               console.error(`[Stripe Webhook Error] Failed to send payment success email:`, mailErr.message);
+            }
+          }
+
+          // If payment was marked paid previously but n8n notification failed or was pending, retry n8n notification safely
+          if (!order.n8nNotificationSent) {
+            try {
+              const n8nResult = await sendOrderNotification(event.type, order);
+              if (n8nResult.success) {
+                order.n8nNotificationSent = true;
+                order.n8nNotificationSentAt = new Date();
+                await order.save();
+                console.log(`[Stripe Webhook] n8n notification dispatched for Order ${order._id}`);
+              } else if (!n8nResult.skipped) {
+                console.warn(`[Stripe Webhook Warning] n8n notification could not be sent: ${n8nResult.error}`);
+              }
+            } catch (n8nErr) {
+              console.error(`[Stripe Webhook Error] Failed to dispatch n8n notification:`, n8nErr.message);
             }
           }
 
@@ -171,6 +189,23 @@ const handleStripeWebhook = async (req, res) => {
             }
           } catch (mailErr) {
             console.error(`[Stripe Webhook Error] Failed to dispatch payment success email:`, mailErr.message);
+          }
+        }
+
+        // Send n8n Order Notification (Idempotent & Safe against network/service failure)
+        if (!order.n8nNotificationSent) {
+          try {
+            const n8nResult = await sendOrderNotification(event.type, order);
+            if (n8nResult.success) {
+              order.n8nNotificationSent = true;
+              order.n8nNotificationSentAt = new Date();
+              await order.save();
+              console.log(`[Stripe Webhook] n8n notification dispatched for Order ${order._id}`);
+            } else if (!n8nResult.skipped) {
+              console.warn(`[Stripe Webhook Warning] n8n notification could not be sent: ${n8nResult.error}`);
+            }
+          } catch (n8nErr) {
+            console.error(`[Stripe Webhook Error] Failed to dispatch n8n notification:`, n8nErr.message);
           }
         }
 

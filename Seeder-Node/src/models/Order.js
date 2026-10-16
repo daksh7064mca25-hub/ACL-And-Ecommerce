@@ -155,6 +155,15 @@ const orderSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    n8nNotificationSent: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    n8nNotificationSentAt: {
+      type: Date,
+      default: null,
+    },
     refundStatus: {
       type: String,
       enum: ['none', 'requested', 'processing', 'partial', 'refunded', 'rejected', 'failed'],

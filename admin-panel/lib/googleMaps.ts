@@ -73,6 +73,17 @@ export async function loadGeocodingLibrary(): Promise<google.maps.GeocodingLibra
   return importLibrary('geocoding');
 }
 
+/**
+ * Load Google Maps Routes Library (Route, computeRoutes)
+ */
+export async function loadRoutesLibrary(): Promise<google.maps.RoutesLibrary> {
+  if (typeof window === 'undefined') {
+    throw new Error('Google Maps can only be loaded in browser environments.');
+  }
+  ensureGoogleMapsConfigured();
+  return importLibrary('routes');
+}
+
 export interface ParsedAddress {
   formattedAddress: string;
   city: string;

@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   loadMapsLibrary,
   loadMarkerLibrary,
+  loadRoutesLibrary,
   hasGoogleMapsApiKey,
   GOOGLE_MAPS_MAP_ID,
 } from '@/lib/googleMaps';
@@ -31,9 +32,11 @@ interface AdminLiveTrackingMapProps {
 /**
  * Validate geographic coordinates
  */
-function isValidCoord(lat?: number | null, lng?: number | null): boolean {
+export function isValidLatLng(lat?: number | null, lng?: number | null): boolean {
   if (lat === null || lat === undefined || lng === null || lng === undefined) return false;
-  if (isNaN(lat) || isNaN(lng)) return false;
+  if (typeof lat !== 'number' || typeof lng !== 'number') return false;
+  if (isNaN(lat) || isNaN(lng) || !isFinite(lat) || !isFinite(lng)) return false;
+  if (lat === 0 && lng === 0) return false;
   return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
 }
 
@@ -73,14 +76,194 @@ export default function AdminLiveTrackingMap({
   const riderMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
   const routeLineRef = useRef<google.maps.Polyline | null>(null);
 
+  // Routing engine refs & throttling
+  const requestIdRef = useRef<number>(0);
+  const isRoutingInProgressRef = useRef<boolean>(false);
+  const lastRoutedRiderPosRef = useRef<{ lat: number; lng: number } | null>(null);
+  const lastRoutedDestPosRef = useRef<{ lat: number; lng: number } | null>(null);
+  const lastRouteTimestampRef = useRef<number>(0);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingRoutePosRef = useRef<{ rider: { lat: number; lng: number }; dest: { lat: number; lng: number } } | null>(null);
+
+  // Map state
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Road route state
+  const [roadDistance, setRoadDistance] = useState<string | null>(null);
+  const [roadDuration, setRoadDuration] = useState<string | null>(null);
+  const [routingStatus, setRoutingStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [routingError, setRoutingError] = useState<string | null>(null);
+
+  // Fallback direct distance
   const [distanceKm, setDistanceKm] = useState<number | null>(null);
 
-  const hasValidDest = isValidCoord(destination?.lat, destination?.lng);
-  const hasValidRider = isValidCoord(riderLocation?.lat, riderLocation?.lng);
+  const hasValidDest = isValidLatLng(destination?.lat, destination?.lng);
+  const hasValidRider = isValidLatLng(riderLocation?.lat, riderLocation?.lng);
 
-  // Compute live distance
+  /**
+   * Request actual driving route with modern Google Maps Routes API (Route.computeRoutes)
+   * eliminating legacy DirectionsService warnings and requests.
+   */
+  const calculateRoute = useCallback(
+    (
+      riderPos: { lat: number; lng: number },
+      destPos: { lat: number; lng: number },
+      forceImmediate = false
+    ) => {
+      if (isCompleted || deliveryStatus === 'delivered') return;
+      if (!isValidLatLng(riderPos.lat, riderPos.lng) || !isValidLatLng(destPos.lat, destPos.lng)) return;
+
+      const execute = async () => {
+        // Prevent overlapping requests
+        if (isRoutingInProgressRef.current) {
+          pendingRoutePosRef.current = { rider: riderPos, dest: destPos };
+          return;
+        }
+
+        const currentReqId = ++requestIdRef.current;
+        isRoutingInProgressRef.current = true;
+        setRoutingStatus((prev) => (prev === 'success' ? 'success' : 'loading'));
+
+        let routeObtained = false;
+
+        try {
+          // 1. Modern Google Maps Routes API (Route.computeRoutes)
+          try {
+            const routesLib = await loadRoutesLibrary();
+            const Route = routesLib?.Route;
+            if (Route && typeof Route.computeRoutes === 'function') {
+              const res = await Route.computeRoutes({
+                origin: { lat: riderPos.lat, lng: riderPos.lng },
+                destination: { lat: destPos.lat, lng: destPos.lng },
+                travelMode: 'DRIVING' as any,
+                fields: ['durationMillis', 'distanceMeters', 'path'],
+              });
+
+              if (currentReqId !== requestIdRef.current) return;
+
+              if (res?.routes && res.routes.length > 0) {
+                const primaryRoute = res.routes[0];
+                if (primaryRoute.path && primaryRoute.path.length > 0) {
+                  const roadPath = primaryRoute.path.map((pt: any) => ({
+                    lat: typeof pt.lat === 'function' ? pt.lat() : pt.lat,
+                    lng: typeof pt.lng === 'function' ? pt.lng() : pt.lng,
+                  }));
+
+                  lastRoutedRiderPosRef.current = riderPos;
+                  lastRoutedDestPosRef.current = destPos;
+
+                  if (routeLineRef.current) {
+                    routeLineRef.current.setPath(roadPath);
+                    if (mapInstanceRef.current && !routeLineRef.current.getMap()) {
+                      routeLineRef.current.setMap(mapInstanceRef.current);
+                    }
+                  }
+
+                  const distMeters = primaryRoute.distanceMeters || 0;
+                  const durMillis = primaryRoute.durationMillis || 0;
+                  const distStr = distMeters < 1000 ? `${Math.round(distMeters)} m` : `${(distMeters / 1000).toFixed(1)} km`;
+                  const durMins = Math.max(1, Math.round(durMillis / 60000));
+                  const durStr = `${durMins} mins`;
+
+                  setRoadDistance(distStr);
+                  setRoadDuration(durStr);
+                  setRoutingStatus('success');
+                  setRoutingError(null);
+                  routeObtained = true;
+                }
+              }
+            }
+          } catch (routesErr) {
+            // Silently fall through to road router if Google Routes API key restrictions block computeRoutes
+          }
+
+          if (currentReqId !== requestIdRef.current) return;
+
+          // 2. High-precision driving road routing fallback
+          if (!routeObtained) {
+            const url = `https://router.project-osrm.org/route/v1/driving/${riderPos.lng},${riderPos.lat};${destPos.lng},${destPos.lat}?overview=full&geometries=geojson`;
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`Road routing service returned status ${res.status}`);
+            const data = await res.json();
+
+            if (currentReqId !== requestIdRef.current) return;
+
+            if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+              const primaryRoute = data.routes[0];
+              const coords = primaryRoute.geometry?.coordinates || [];
+
+              // Convert GeoJSON [lng, lat] to Google Maps { lat, lng } road vertices
+              const roadPath = coords.map(([lng, lat]: [number, number]) => ({ lat, lng }));
+
+              lastRoutedRiderPosRef.current = riderPos;
+              lastRoutedDestPosRef.current = destPos;
+
+              if (routeLineRef.current) {
+                routeLineRef.current.setPath(roadPath);
+                if (mapInstanceRef.current && !routeLineRef.current.getMap()) {
+                  routeLineRef.current.setMap(mapInstanceRef.current);
+                }
+              }
+
+              const distMeters = primaryRoute.distance;
+              const durSec = primaryRoute.duration;
+              const distStr = distMeters < 1000 ? `${Math.round(distMeters)} m` : `${(distMeters / 1000).toFixed(1)} km`;
+              const durMins = Math.max(1, Math.round(durSec / 60));
+              const durStr = `${durMins} mins`;
+
+              setRoadDistance(distStr);
+              setRoadDuration(durStr);
+              setRoutingStatus('success');
+              setRoutingError(null);
+              routeObtained = true;
+            } else {
+              throw new Error('No driving route found');
+            }
+          }
+        } catch (err: any) {
+          if (currentReqId !== requestIdRef.current) return;
+          console.error('[AdminLiveTrackingMap] Route calculation error:', err);
+          setRoutingStatus('error');
+          setRoutingError(err.message || 'Failed to calculate road route');
+          if (!lastRoutedRiderPosRef.current && routeLineRef.current) {
+            routeLineRef.current.setMap(null);
+          }
+        } finally {
+          if (currentReqId === requestIdRef.current) {
+            isRoutingInProgressRef.current = false;
+            lastRouteTimestampRef.current = Date.now();
+
+            if (pendingRoutePosRef.current) {
+              const next = pendingRoutePosRef.current;
+              pendingRoutePosRef.current = null;
+              calculateRoute(next.rider, next.dest, true);
+            }
+          }
+        }
+      };
+
+      if (forceImmediate) {
+        if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+        execute();
+      } else {
+        const now = Date.now();
+        const elapsed = now - lastRouteTimestampRef.current;
+        const THROTTLE_INTERVAL_MS = 4000;
+
+        if (elapsed >= THROTTLE_INTERVAL_MS) {
+          if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+          execute();
+        } else {
+          if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+          debounceTimerRef.current = setTimeout(execute, THROTTLE_INTERVAL_MS - elapsed);
+        }
+      }
+    },
+    [isCompleted, deliveryStatus]
+  );
+
+  // Compute live direct fallback distance
   useEffect(() => {
     if (hasValidRider && hasValidDest && riderLocation && destination) {
       const dist = calculateHaversineDistance(
@@ -117,6 +300,7 @@ export default function AdminLiveTrackingMap({
         const [{ Map, Polyline }, { AdvancedMarkerElement }] = await Promise.all([
           loadMapsLibrary(),
           loadMarkerLibrary(),
+          loadRoutesLibrary(),
         ]);
 
         if (!isSubscribed || !mapContainerRef.current) return;
@@ -200,34 +384,37 @@ export default function AdminLiveTrackingMap({
             title: `Rider: ${riderName}`,
           });
           riderMarkerRef.current = riderMarker;
+        }
 
-          // 3. Polyline Route
-          if (hasValidDest && destination) {
-            const line = new Polyline({
-              path: [
-                { lat: riderLocation.lat, lng: riderLocation.lng },
-                { lat: destination.lat, lng: destination.lng },
-              ],
-              geodesic: true,
-              strokeColor: '#f97316',
-              strokeOpacity: 0.85,
-              strokeWeight: 3,
-              icons: [
-                {
-                  icon: { path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 2.5, strokeColor: '#ea580c' },
-                  offset: '50%',
-                },
-              ],
-            });
-            line.setMap(map);
-            routeLineRef.current = line;
+        // 3. Road Route Polyline (Populated with road geometry)
+        const line = new Polyline({
+          path: [],
+          geodesic: true,
+          strokeColor: '#f97316',
+          strokeOpacity: 0.85,
+          strokeWeight: 4,
+          icons: [
+            {
+              icon: { path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 2.2, strokeColor: '#ea580c', fillColor: '#ea580c', fillOpacity: 1 },
+              offset: '50%',
+            },
+          ],
+        });
+        routeLineRef.current = line;
 
-            // Fit Bounds
-            const bounds = new google.maps.LatLngBounds();
-            bounds.extend({ lat: destination.lat, lng: destination.lng });
-            bounds.extend({ lat: riderLocation.lat, lng: riderLocation.lng });
-            map.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
-          }
+        // Initial Route calculation
+        if (hasValidRider && hasValidDest && riderLocation && destination && !isCompleted && deliveryStatus !== 'delivered') {
+          calculateRoute(
+            { lat: riderLocation.lat, lng: riderLocation.lng },
+            { lat: destination.lat, lng: destination.lng },
+            true
+          );
+
+          // Fit Bounds
+          const bounds = new google.maps.LatLngBounds();
+          bounds.extend({ lat: destination.lat, lng: destination.lng });
+          bounds.extend({ lat: riderLocation.lat, lng: riderLocation.lng });
+          map.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
         }
 
         if (isSubscribed) {
@@ -245,9 +432,10 @@ export default function AdminLiveTrackingMap({
 
     return () => {
       isSubscribed = false;
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       if (routeLineRef.current) routeLineRef.current.setMap(null);
     };
-  }, [hasValidDest, destination?.lat, destination?.lng]);
+  }, [hasValidDest, destination?.lat, destination?.lng, calculateRoute]);
 
   // Smoothly update Rider Marker position without recreating the map
   useEffect(() => {
@@ -255,6 +443,7 @@ export default function AdminLiveTrackingMap({
 
     const newPos = { lat: riderLocation.lat, lng: riderLocation.lng };
 
+    // 1. Immediately update rider marker position
     if (riderMarkerRef.current) {
       riderMarkerRef.current.position = newPos;
     } else {
@@ -286,15 +475,7 @@ export default function AdminLiveTrackingMap({
       });
     }
 
-    // Update polyline path if destination exists
-    if (routeLineRef.current && hasValidDest && destination) {
-      routeLineRef.current.setPath([
-        newPos,
-        { lat: destination.lat, lng: destination.lng },
-      ]);
-    }
-
-    // Pan bounds smoothly
+    // 2. Pan map smoothly
     if (mapInstanceRef.current && hasValidDest && destination) {
       const bounds = new google.maps.LatLngBounds();
       bounds.extend({ lat: destination.lat, lng: destination.lng });
@@ -303,7 +484,66 @@ export default function AdminLiveTrackingMap({
     } else if (mapInstanceRef.current) {
       mapInstanceRef.current.panTo(newPos);
     }
-  }, [hasValidRider, riderLocation?.lat, riderLocation?.lng, hasValidDest, destination?.lat, destination?.lng, riderName, isCompleted, deliveryStatus]);
+
+    // 3. Determine if route recalculation is needed
+    if (isCompleted || deliveryStatus === 'delivered' || !hasValidDest || !destination) {
+      if (routeLineRef.current) routeLineRef.current.setMap(null);
+      return;
+    }
+
+    const destPos = { lat: destination.lat, lng: destination.lng };
+    const lastRider = lastRoutedRiderPosRef.current;
+    const lastDest = lastRoutedDestPosRef.current;
+
+    let shouldRecalc = false;
+    let isImmediate = false;
+
+    if (!lastRider || !lastDest) {
+      shouldRecalc = true;
+      isImmediate = true;
+    } else {
+      const destMovedMeters = calculateHaversineDistance(lastDest.lat, lastDest.lng, destPos.lat, destPos.lng) * 1000;
+      if (destMovedMeters > 10) {
+        shouldRecalc = true;
+        isImmediate = true;
+      }
+
+      // Meaningful movement threshold: 35 meters
+      const riderMovedMeters = calculateHaversineDistance(lastRider.lat, lastRider.lng, newPos.lat, newPos.lng) * 1000;
+      if (riderMovedMeters >= 35) {
+        shouldRecalc = true;
+      }
+
+      // Route staleness threshold: > 45s since last calculation with movement
+      const timeSinceLastRoute = Date.now() - lastRouteTimestampRef.current;
+      if (timeSinceLastRoute > 45000 && riderMovedMeters >= 10) {
+        shouldRecalc = true;
+      }
+    }
+
+    if (shouldRecalc) {
+      calculateRoute(newPos, destPos, isImmediate);
+    }
+  }, [
+    hasValidRider,
+    riderLocation?.lat,
+    riderLocation?.lng,
+    hasValidDest,
+    destination?.lat,
+    destination?.lng,
+    riderName,
+    isCompleted,
+    deliveryStatus,
+    calculateRoute,
+  ]);
+
+  // Clean up completed delivery state
+  useEffect(() => {
+    if (isCompleted || deliveryStatus === 'delivered') {
+      if (routeLineRef.current) routeLineRef.current.setMap(null);
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    }
+  }, [isCompleted, deliveryStatus]);
 
   const isDeliveredState = isCompleted || deliveryStatus === 'delivered';
 
@@ -358,6 +598,26 @@ export default function AdminLiveTrackingMap({
           <div className="text-xs text-white font-bold flex items-center gap-1.5">
             {isDeliveredState ? (
               <span className="text-emerald-400">Arrived at Destination ✓</span>
+            ) : roadDistance ? (
+              <>
+                <span className="text-slate-400 font-normal">Road Distance:</span>
+                <span>{roadDistance}</span>
+                {roadDuration && (
+                  <span className="text-xs font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-md">
+                    ~{roadDuration} ETA
+                  </span>
+                )}
+              </>
+            ) : routingStatus === 'loading' ? (
+              <span className="text-slate-400 text-[11px] animate-pulse">Calculating road route...</span>
+            ) : routingError ? (
+              <>
+                <span className="text-slate-400 font-normal">Direct Approx:</span>
+                <span>{distanceKm ? `${distanceKm.toFixed(2)} km` : '—'}</span>
+                <span className="text-[10px] text-amber-400 bg-amber-950/50 border border-amber-500/30 px-1.5 py-0.5 rounded" title={routingError}>
+                  Route unavailable
+                </span>
+              </>
             ) : distanceKm !== null ? (
               <>
                 <span className="text-slate-400 font-normal">Distance:</span>
